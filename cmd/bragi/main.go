@@ -20,6 +20,7 @@ import (
 	"github.com/Tharkis/bragi/internal/config"
 	"github.com/Tharkis/bragi/internal/db"
 	"github.com/Tharkis/bragi/internal/events"
+	"github.com/Tharkis/bragi/internal/movies"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
 	"github.com/Tharkis/bragi/web"
@@ -78,6 +79,9 @@ func run() error {
 	pipeline := tv.New(st, hc, log, hub)
 	pipeline.TMDBKey = cfg.TMDBKey
 	go pipeline.Run(ctx)
+	moviePipeline := movies.New(st, hc, log, hub, pipeline.TMDB)
+	moviePipeline.RefreshJellyfin = pipeline.RefreshJellyfin
+	go moviePipeline.Run(ctx)
 	bookPipeline := books.New(st, hc, log, hub)
 	bookPipeline.OnImported = pipeline.RefreshJellyfin
 	go bookPipeline.Run(ctx)
@@ -85,7 +89,7 @@ func run() error {
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
 		Handler: api.New(api.Options{Store: st, Logger: log, Version: version, UI: ui,
-			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Books: bookPipeline, Events: hub}),
+			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Movies: moviePipeline, Books: bookPipeline, Events: hub}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

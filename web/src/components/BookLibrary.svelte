@@ -59,7 +59,7 @@
 {#if loaded && list.length === 0}
   <div class="card empty muted">
     <p>No {noun}s yet.</p>
-    <p class="small"><a href={type === 'audiobook' ? '/discover/audiobooks' : '/discover/books'} onclick={link}>Request one</a>.</p>
+    <p class="small"><a href="/discover" onclick={(e) => { try { localStorage.setItem('bragi.discover', type) } catch {} link(e) }}>Request one</a>.</p>
   </div>
 {/if}
 

@@ -71,20 +71,19 @@ func (n *newznab) Test(ctx context.Context) error {
 	return fmt.Errorf("unexpected <%s> response: check the URL", root)
 }
 
-// tvCategory is the Newznab category for all TV.
-const tvCategory = "5000"
-
 // searchParams picks the Newznab search function and categories for a
 // media type.
 func searchParams(q Query) (fn string, cats []string) {
 	switch q.MediaType {
+	case "movie":
+		return "movie", []string{"2000"}
 	case "book":
 		// Books, and the Ebook subcategory some indexers use on its own.
 		return "search", []string{"7000", "7020"}
 	case "audiobook":
 		return "search", []string{"3030"}
 	}
-	return "tvsearch", []string{tvCategory}
+	return "tvsearch", []string{"5000"}
 }
 
 func (n *newznab) Search(ctx context.Context, q Query) ([]Release, error) {
@@ -101,7 +100,15 @@ func (n *newznab) Search(ctx context.Context, q Query) ([]Release, error) {
 	v.Set("cat", strings.Join(cats, ","))
 	v.Set("limit", "100")
 	v.Set("extended", "1")
-	v.Set("q", q.Text)
+	switch {
+	case fn == "movie" && q.IMDBID != "":
+		// Indexers match the IMDb id far better than the title.
+		v.Set("imdbid", strings.TrimPrefix(q.IMDBID, "tt"))
+	case fn == "movie":
+		v.Set("q", SearchText(q))
+	default:
+		v.Set("q", q.Text)
+	}
 	if fn == "tvsearch" && q.Season > 0 {
 		v.Set("season", strconv.Itoa(q.Season))
 		if q.Episode > 0 {

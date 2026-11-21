@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/integrations"
+	"github.com/Tharkis/bragi/internal/library"
 	"github.com/Tharkis/bragi/internal/metadata"
 	"github.com/Tharkis/bragi/internal/store"
 )
@@ -82,24 +82,14 @@ func (s *Service) publish(typ string, data any) {
 
 // ---- Adding books ----
 
-var reBadPath = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
-
-// cleanName makes a title safe as a file or folder name on every OS.
-func cleanName(s string) string {
-	s = strings.ReplaceAll(s, ": ", " - ")
-	s = reBadPath.ReplaceAllString(s, "")
-	s = strings.Join(strings.Fields(s), " ")
-	return strings.TrimRight(s, ". ")
-}
-
 // bookFolder is "Author/Title (Year)", the layout Audiobookshelf, Calibre-
 // style tools and Jellyfin all read.
 func bookFolder(author, title string, year int) string {
-	a := cleanName(author)
+	a := library.CleanName(author)
 	if a == "" {
 		a = "Unknown Author"
 	}
-	t := cleanName(title)
+	t := library.CleanName(title)
 	if year > 0 {
 		t = fmt.Sprintf("%s (%d)", t, year)
 	}

@@ -496,13 +496,13 @@ type Download struct {
 	UpdatedAt        string  `json:"updatedAt"`
 
 	// Filled for display: the show and what the download covers.
-	// MediaType is the type of the item it is for (tv, book, ...).
-	MediaType   string `json:"mediaType"`
 	SeriesID    int64  `json:"seriesId"`
 	SeriesTitle string `json:"seriesTitle"`
 	PosterPath  string `json:"posterPath,omitempty"`
 	Label       string `json:"label"` // "S01E02", "Season 1"
 	ClientName  string `json:"clientName"`
+	// MediaType is the type of the item the download is for: tv, movie, book, ...
+	MediaType string `json:"mediaType"`
 }
 
 const downloadCols = `d.id, COALESCE(d.media_item_id, 0), COALESCE(d.download_client_id, 0), d.client_job_id, d.release_title, d.protocol,
@@ -596,8 +596,8 @@ func (s *Store) ActiveDownloads(ctx context.Context) ([]Download, error) {
 	return s.queryDownloads(ctx, `d.status IN ('queued', 'downloading', 'completed', 'importing') ORDER BY d.id`)
 }
 
-// ActiveDownloadsOf returns the unfinished downloads for one media type.
-// Each media type's pipeline polls only its own.
+// ActiveDownloadsOf returns the unfinished downloads for one media type,
+// oldest first. Each media type's pipeline polls only its own.
 func (s *Store) ActiveDownloadsOf(ctx context.Context, mediaType string) ([]Download, error) {
 	return s.queryDownloads(ctx, `d.status IN ('queued', 'downloading', 'completed', 'importing') AND m.media_type = ? ORDER BY d.id`, mediaType)
 }
@@ -671,8 +671,9 @@ type RequestFilter struct {
 	UserID int64 // 0 for everyone
 	Status string
 	TMDBID int64
-	// MediaType and ForeignID find requests for a book or audiobook.
+	// MediaType narrows to one type; TMDB ids of shows and movies overlap.
 	MediaType string
+	// ForeignID finds requests for a book or audiobook by Open Library id.
 	ForeignID string
 }
 

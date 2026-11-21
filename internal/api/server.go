@@ -14,6 +14,7 @@ import (
 
 	"github.com/Tharkis/bragi/internal/books"
 	"github.com/Tharkis/bragi/internal/events"
+	"github.com/Tharkis/bragi/internal/movies"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
 )
@@ -28,6 +29,7 @@ type Server struct {
 	mux     *http.ServeMux
 	tv      *tv.Service
 	books   *books.Service
+	movies  *movies.Service
 	events  *events.Hub
 }
 
@@ -45,6 +47,8 @@ type Options struct {
 	// Books runs the ebook and audiobook pipeline. Nil builds one that is
 	// not scheduled, for tests.
 	Books *books.Service
+	// Movies runs the movie pipeline. Nil builds one that is not scheduled.
+	Movies *movies.Service
 	// Events carries live status changes to /api/v1/events.
 	Events *events.Hub
 }
@@ -63,11 +67,15 @@ func New(o Options) http.Handler {
 	if o.TV == nil {
 		o.TV = tv.New(o.Store, o.HTTPClient, o.Logger, o.Events)
 	}
+	if o.Movies == nil {
+		o.Movies = movies.New(o.Store, o.HTTPClient, o.Logger, o.Events, o.TV.TMDB)
+		o.Movies.RefreshJellyfin = o.TV.RefreshJellyfin
+	}
 	if o.Books == nil {
 		o.Books = books.New(o.Store, o.HTTPClient, o.Logger, o.Events)
 	}
 	s := &Server{store: o.Store, log: o.Logger, version: o.Version, hc: o.HTTPClient, ui: o.UI, mux: http.NewServeMux(),
-		tv: o.TV, books: o.Books, events: o.Events}
+		tv: o.TV, movies: o.Movies, books: o.Books, events: o.Events}
 	s.routes()
 	return s.withUser(s.logRequests(s.mux))
 }
@@ -121,6 +129,7 @@ func (s *Server) routes() {
 	// plugin share.
 	m.HandleFunc("GET /api/v1/discover/search", s.requireUser(s.handleDiscoverSearch))
 	m.HandleFunc("GET /api/v1/discover/tv/{id}", s.requireUser(s.handleDiscoverShow))
+	m.HandleFunc("GET /api/v1/discover/trending", s.requireUser(s.handleDiscoverTrending))
 	m.HandleFunc("POST /api/v1/requests", s.requireUser(s.handleCreateRequest))
 	m.HandleFunc("GET /api/v1/requests", s.requireUser(s.handleListRequests))
 	m.HandleFunc("GET /api/v1/requests/{id}", s.requireUser(s.handleGetRequest))
@@ -146,9 +155,21 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /api/v1/books/{id}/monitor", s.requireAdmin(s.handleMonitorBook))
 	m.HandleFunc("GET /api/v1/books/{id}/releases", s.requireAdmin(s.handleBookReleases))
 	m.HandleFunc("POST /api/v1/books/{id}/grab", s.requireAdmin(s.handleGrabBook))
+	m.HandleFunc("GET /api/v1/discover/movie/{id}", s.requireUser(s.handleDiscoverMovie))
+	m.HandleFunc("GET /api/v1/movies", s.requireUser(s.handleListMovies))
+	m.HandleFunc("GET /api/v1/movies/{id}", s.requireUser(s.handleGetMovie))
+	m.HandleFunc("DELETE /api/v1/movies/{id}", s.requireAdmin(s.handleDeleteMovie))
+	m.HandleFunc("POST /api/v1/movies/{id}/search", s.requireAdmin(s.handleSearchMovie))
+	m.HandleFunc("POST /api/v1/movies/{id}/refresh", s.requireAdmin(s.handleRefreshMovie))
+	m.HandleFunc("PUT /api/v1/movies/{id}/monitor", s.requireAdmin(s.handleMonitorMovie))
+	m.HandleFunc("GET /api/v1/movies/{id}/releases", s.requireAdmin(s.handleMovieReleases))
+	m.HandleFunc("POST /api/v1/movies/{id}/grab", s.requireAdmin(s.handleGrabMovie))
 	m.HandleFunc("GET /api/v1/activity/queue", s.requireUser(s.handleQueue))
 	m.HandleFunc("GET /api/v1/activity/history", s.requireUser(s.handleHistory))
 	m.HandleFunc("DELETE /api/v1/activity/queue/{id}", s.requireAdmin(s.handleRemoveDownload))
+
+	// Jellyseerr-compatible endpoints for existing request clients.
+	s.seerrRoutes()
 
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such endpoint")

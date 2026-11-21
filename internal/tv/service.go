@@ -10,14 +10,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"regexp"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/Tharkis/bragi/internal/events"
+	"github.com/Tharkis/bragi/internal/library"
 	"github.com/Tharkis/bragi/internal/metadata"
 	"github.com/Tharkis/bragi/internal/store"
 )
@@ -169,21 +167,11 @@ func monitorFunc(mode string, seasons []int, show *metadata.Show) store.MonitorF
 	}
 }
 
-var reBadPath = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
-
-// cleanName makes a title safe as a file or folder name on every OS.
-func cleanName(s string) string {
-	s = strings.ReplaceAll(s, ": ", " - ")
-	s = reBadPath.ReplaceAllString(s, "")
-	s = strings.Join(strings.Fields(s), " ")
-	return strings.TrimRight(s, ". ")
-}
-
 func seriesFolder(title string, year int) string {
 	if year > 0 {
-		return cleanName(fmt.Sprintf("%s (%d)", title, year))
+		return library.CleanName(fmt.Sprintf("%s (%d)", title, year))
 	}
-	return cleanName(title)
+	return library.CleanName(title)
 }
 
 // tvLibrary returns the library to add shows to: the one given, or the
@@ -341,11 +329,6 @@ func (s *Service) refreshStale(ctx context.Context) {
 			s.Log.Warn("metadata refresh failed", "series", id, "err", err)
 		}
 	}
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }
 
 func itoa(n int) string { return fmt.Sprint(n) }

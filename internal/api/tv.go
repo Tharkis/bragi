@@ -12,6 +12,7 @@ import (
 
 	"github.com/Tharkis/bragi/internal/integrations"
 	"github.com/Tharkis/bragi/internal/metadata"
+	"github.com/Tharkis/bragi/internal/movies"
 	"github.com/Tharkis/bragi/internal/release"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
@@ -31,7 +32,7 @@ func (s *Server) metadataError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusFailedDependency, sentence(err.Error()))
 	case errors.Is(err, metadata.ErrBadKey):
 		writeError(w, http.StatusFailedDependency, "TMDB rejected the API key; check it under Settings, Connections")
-	case errors.Is(err, tv.ErrNoLibrary):
+	case errors.Is(err, tv.ErrNoLibrary), errors.Is(err, movies.ErrNoLibrary):
 		writeError(w, http.StatusFailedDependency, sentence(err.Error()))
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found")
@@ -58,11 +59,16 @@ type discoverResult struct {
 
 func (s *Server) handleDiscoverSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if t := r.URL.Query().Get("type"); store.IsBookType(t) {
+	switch t := r.URL.Query().Get("type"); t {
+	case "", "tv":
+	case "movie":
+		s.handleDiscoverMovies(w, r)
+		return
+	case "book", "audiobook":
 		s.handleDiscoverBooks(w, r, t)
 		return
-	} else if t != "" && t != "tv" {
-		writeError(w, http.StatusBadRequest, "type must be tv, book or audiobook")
+	default:
+		writeError(w, http.StatusBadRequest, "type must be tv, movie, book or audiobook")
 		return
 	}
 	if q == "" {
@@ -82,7 +88,7 @@ func (s *Server) handleDiscoverSearch(w http.ResponseWriter, r *http.Request) {
 		if sr, err := s.store.GetSeriesByTMDB(ctx, int64(sh.TMDBID)); err == nil {
 			d.SeriesID = sr.ID
 		}
-		if reqs, err := s.store.ListRequests(ctx, store.RequestFilter{TMDBID: int64(sh.TMDBID)}); err == nil {
+		if reqs, err := s.store.ListRequests(ctx, store.RequestFilter{TMDBID: int64(sh.TMDBID), MediaType: "tv"}); err == nil {
 			for _, rq := range reqs {
 				if rq.Status == "pending" || rq.Status == "approved" || rq.Status == "available" {
 					d.Requested = rq.Status
@@ -131,7 +137,8 @@ type requestBody struct {
 }
 
 type requestProgress struct {
-	SeriesID   int64 `json:"seriesId"`
+	SeriesID   int64 `json:"seriesId,omitempty"`
+	MovieID    int64 `json:"movieId,omitempty"`
 	Episodes   int   `json:"episodes"`
 	Imported   int   `json:"imported"`
 	Missing    int   `json:"missing"`
@@ -152,6 +159,9 @@ func (s *Server) toRequestResponse(ctx context.Context, rq store.Request, withEp
 		return s.bookRequestResponse(ctx, rq)
 	}
 	out := requestResponse{Request: rq, PosterURL: posterURL(rq.PosterPath, "w185")}
+	if rq.MediaType == "movie" {
+		return s.movieRequestResponse(ctx, out)
+	}
 	var scope tv.Scope
 	if json.Unmarshal([]byte(rq.Scope), &scope) == nil && len(scope.Seasons) > 0 {
 		out.Seasons = scope.Seasons
@@ -187,8 +197,12 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		s.createBookRequest(w, r, in)
 		return
 	}
+	if in.Type == "movie" {
+		s.createMovieRequest(w, r, in)
+		return
+	}
 	if in.Type != "tv" {
-		writeError(w, http.StatusBadRequest, "type must be tv, book or audiobook")
+		writeError(w, http.StatusBadRequest, "type must be tv, movie, book or audiobook")
 		return
 	}
 	if in.TMDBID <= 0 {
@@ -200,7 +214,7 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// One open request per user and show.
-	if mine, err := s.store.ListRequests(r.Context(), store.RequestFilter{UserID: u.ID, TMDBID: in.TMDBID}); err == nil {
+	if mine, err := s.store.ListRequests(r.Context(), store.RequestFilter{UserID: u.ID, TMDBID: in.TMDBID, MediaType: "tv"}); err == nil {
 		for _, rq := range mine {
 			if rq.Status == "pending" {
 				writeJSON(w, http.StatusConflict, map[string]any{"error": "you already asked for this show", "request": s.toRequestResponse(r.Context(), rq, false)})
@@ -239,6 +253,9 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) approve(ctx context.Context, rq *store.Request, reason string) (*store.Request, error) {
 	if store.IsBookType(rq.MediaType) {
 		return s.approveBook(ctx, rq, reason)
+	}
+	if rq.MediaType == "movie" {
+		return s.approveMovie(ctx, rq, reason)
 	}
 	var scope tv.Scope
 	json.Unmarshal([]byte(rq.Scope), &scope)
@@ -615,6 +632,24 @@ func (s *Server) handleStartScan(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength > 0 && !readJSON(w, r, &in) {
 		return
 	}
+	mediaType := r.URL.Query().Get("type")
+	if in.LibraryID != 0 {
+		if lib, err := s.store.GetLibrary(r.Context(), in.LibraryID); err == nil {
+			mediaType = lib.MediaType
+		}
+	}
+	if mediaType == "movie" {
+		err := s.movies.StartScan(r.Context(), in.LibraryID)
+		switch {
+		case errors.Is(err, movies.ErrScanRunning):
+			writeError(w, http.StatusConflict, sentence(err.Error()))
+		case err != nil:
+			s.metadataError(w, err)
+		default:
+			writeJSON(w, http.StatusAccepted, s.movies.ScanState())
+		}
+		return
+	}
 	err := s.tv.StartScan(r.Context(), in.LibraryID)
 	switch {
 	case errors.Is(err, tv.ErrScanRunning):
@@ -627,7 +662,13 @@ func (s *Server) handleStartScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, s.tv.ScanState())
 }
 
+// handleScanState returns the current or last scan of the TV folder, or of
+// the movie folder with ?type=movie.
 func (s *Server) handleScanState(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("type") == "movie" {
+		writeJSON(w, http.StatusOK, s.movies.ScanState())
+		return
+	}
 	writeJSON(w, http.StatusOK, s.tv.ScanState())
 }
 
@@ -676,12 +717,16 @@ func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if d, err := s.store.GetDownload(r.Context(), id); err == nil && store.IsBookType(d.MediaType) {
-		s.books.Cancel(r.Context(), d)
-		w.WriteHeader(http.StatusNoContent)
-		return
+	cancel := s.tv.Cancel
+	if d, err := s.store.GetDownload(r.Context(), id); err == nil {
+		switch {
+		case store.IsBookType(d.MediaType):
+			cancel = func(ctx context.Context, _ int64) error { return s.books.Cancel(ctx, d) }
+		case d.MediaType == "movie":
+			cancel = s.movies.Cancel
+		}
 	}
-	if err := s.tv.Cancel(r.Context(), id); err != nil {
+	if err := cancel(r.Context(), id); err != nil {
 		s.storeError(w, err, "download")
 		return
 	}

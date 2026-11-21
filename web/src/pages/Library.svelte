@@ -4,11 +4,13 @@
   import { link } from '../lib/router.svelte.js'
   import { onEvents } from '../lib/events.js'
   import Poster from '../components/Poster.svelte'
-  import BookLibrary from '../components/BookLibrary.svelte'
+  import { movieState } from '../lib/status.js'
   import MediaTabs from '../components/MediaTabs.svelte'
 
-  let { me, type = 'tv' } = $props()
+  let { me, kind = 'tv' } = $props()
   const admin = me.role === 'admin'
+  const movies = kind === 'movie'
+  const noun = movies ? ['movie', 'movies'] : ['show', 'shows']
 
   let shows = $state([])
   let loaded = $state(false)
@@ -18,8 +20,8 @@
 
   async function load() {
     try {
-      shows = await get('/series')
-      if (admin) scan = await get('/libraries/scan')
+      shows = await get(movies ? '/movies' : '/series')
+      if (admin) scan = await get('/libraries/scan' + (movies ? '?type=movie' : ''))
       error = ''
     } catch (e) {
       error = e.message
@@ -30,13 +32,13 @@
 
   onMount(() => {
     load()
-    return onEvents(['series', 'episodes', 'download', 'scan'], load)
+    return onEvents(movies ? ['movie', 'download', 'scan'] : ['series', 'episodes', 'download', 'scan'], load)
   })
 
   async function startScan() {
     error = ''
     try {
-      scan = await post('/libraries/scan')
+      scan = await post('/libraries/scan' + (movies ? '?type=movie' : ''))
     } catch (e) {
       error = e.message
     }
@@ -54,23 +56,22 @@
   }
 </script>
 
-{#if type !== 'tv'}
-  {#key type}<BookLibrary {me} {type} />{/key}
-{:else}
 <div class="page-head">
   <div>
     <h1>Library</h1>
-    <p class="muted">{shows.length} {shows.length === 1 ? 'show' : 'shows'}</p>
+    <p class="muted">{shows.length} {shows.length === 1 ? noun[0] : noun[1]}</p>
   </div>
   <div class="row">
-    {#if shows.length > 8}<input class="filter" placeholder="Filter…" bind:value={filter} aria-label="Filter shows" />{/if}
+    {#if shows.length > 8}<input class="filter" placeholder="Filter…" bind:value={filter} aria-label="Filter {noun[1]}" />{/if}
     {#if admin}
-      <button onclick={startScan} disabled={scan?.running}>{scan?.running ? 'Scanning…' : 'Scan TV folder'}</button>
+      <button onclick={startScan} disabled={scan?.running}>
+        {scan?.running ? 'Scanning…' : movies ? 'Scan movie folder' : 'Scan TV folder'}
+      </button>
     {/if}
   </div>
 </div>
 
-<MediaTabs base="/library" {type} />
+<MediaTabs base="/library" type={kind} />
 
 {#if error}<div class="notice bad">{error}</div>{/if}
 
@@ -82,7 +83,7 @@
 {:else if scan?.finished && (scan.added.length || scan.unmatched.length)}
   <details class="card scan">
     <summary class="small">
-      Last scan added {scan.added.length} {scan.added.length === 1 ? 'show' : 'shows'} and linked {scan.files} files.
+      Last scan added {scan.added.length} {scan.added.length === 1 ? noun[0] : noun[1]} and linked {scan.files} files.
       {#if scan.unmatched.length}{scan.unmatched.length} folders were not recognised.{/if}
     </summary>
     {#if scan.unmatched.length}
@@ -98,24 +99,33 @@
   <div class="card empty muted">
     <p>Nothing here yet.</p>
     <p class="small">
-      <a href="/discover" onclick={link}>Request a show</a>{#if admin}, or press Scan TV folder to add the shows you already have{/if}.
+      <a href="/discover" onclick={link}>Request a {noun[0]}</a>{#if admin}, or press {movies ? 'Scan movie folder' : 'Scan TV folder'} to add the
+        {noun[1]} you already have{/if}.
     </p>
   </div>
 {/if}
 
 <div class="poster-grid">
   {#each shown as s (s.id)}
-    {@const [label, tone] = summary(s)}
-    <a href={`/library/${s.id}`} onclick={link}>
-      <Poster url={s.posterUrl} title={s.title} />
-      <div class="title">{s.title}</div>
-      <div class="small muted">{s.year || ''} · {s.imported}/{s.episodes} episodes</div>
-      <span class="badge {tone}">{label}</span>
-    </a>
+    {#if movies}
+      {@const [label, tone] = movieState(s)}
+      <a href={`/movies/${s.id}`} onclick={link}>
+        <Poster url={s.posterUrl} title={s.title} />
+        <div class="title">{s.title}</div>
+        <div class="small muted">{s.year || ''}{s.quality ? ` · ${s.quality}` : ''}</div>
+        <span class="badge {tone}">{label}</span>
+      </a>
+    {:else}
+      {@const [label, tone] = summary(s)}
+      <a href={`/library/${s.id}`} onclick={link}>
+        <Poster url={s.posterUrl} title={s.title} />
+        <div class="title">{s.title}</div>
+        <div class="small muted">{s.year || ''} · {s.imported}/{s.episodes} episodes</div>
+        <span class="badge {tone}">{label}</span>
+      </a>
+    {/if}
   {/each}
 </div>
-
-{/if}
 
 <style>
   .filter {

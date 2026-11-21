@@ -45,10 +45,12 @@ func (p *prowlarr) Test(ctx context.Context) error {
 	return nil
 }
 
-// SearchText is the text query for q, e.g. "Severance S01E02" or
-// "Severance S01" for a season pack.
+// SearchText is the text query for q, e.g. "Severance S01E02",
+// "Severance S01" for a season pack, or "Dune Part Two 2024" for a movie.
 func SearchText(q Query) string {
 	switch {
+	case q.MediaType == "movie" && q.Year > 0:
+		return fmt.Sprintf("%s %d", q.Text, q.Year)
 	case q.Season > 0 && q.Episode > 0:
 		return fmt.Sprintf("%s S%02dE%02d", q.Text, q.Season, q.Episode)
 	case q.Season > 0:

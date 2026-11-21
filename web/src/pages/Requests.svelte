@@ -3,7 +3,7 @@
   import { get, post, del } from '../lib/api.js'
   import { link } from '../lib/router.svelte.js'
   import { onEvents } from '../lib/events.js'
-  import { requestStates, scopeLabel, when, isBook, bookTypes, itemPath } from '../lib/status.js'
+  import { requestStates, scopeLabel, when, itemPath, isBook, bookTypes } from '../lib/status.js'
   import Poster from '../components/Poster.svelte'
   import Badge from '../components/Badge.svelte'
 
@@ -29,7 +29,7 @@
 
   onMount(() => {
     load()
-    return onEvents(['request', 'download', 'episodes', 'book'], load)
+    return onEvents(['request', 'download', 'episodes', 'movie', 'book'], load)
   })
 
   const pending = $derived(requests.filter((r) => r.status === 'pending'))
@@ -56,6 +56,15 @@
     } finally {
       busy[r.id] = false
     }
+  }
+
+  const itemLink = (r) => (r.type === 'movie' ? `/movies/${r.progress.movieId}` : itemPath(r.type, r.progress.seriesId))
+
+  function movieProgress(p) {
+    if (p.imported) return 'In the library'
+    if (p.downloading) return 'Downloading now'
+    if (p.missing) return 'Bragi is looking for a good release'
+    return 'Not out yet. Bragi starts looking once it is.'
   }
 
   const pct = (p) => (p && p.episodes ? Math.round((100 * p.imported) / p.episodes) : 0)
@@ -99,13 +108,11 @@
         <div class="spread">
           <div>
             <div class="title">
-              {#if r.progress}<a href={itemPath(r.type, r.progress.seriesId)} onclick={link}>{r.title}</a>{:else}{r.title}{/if}
+              {#if r.progress}<a href={itemLink(r)} onclick={link}>{r.title}</a>{:else}{r.title}{/if}
               {#if r.year}<span class="muted">({r.year})</span>{/if}
             </div>
             <div class="muted small">
-              {isBook(r.type) ? `${bookTypes[r.type]}${r.author ? ' by ' + r.author : ''}` : scopeLabel(r.seasons)} · {admin
-                ? `${r.username}, `
-                : ''}{when(r.createdAt)}
+              {isBook(r.type) ? `${bookTypes[r.type]}${r.author ? ' by ' + r.author : ''}` : scopeLabel(r.seasons, r.type)} · {admin ? `${r.username}, ` : ''}{when(r.createdAt)}
             </div>
           </div>
           <Badge {label} {tone} />
@@ -113,16 +120,18 @@
 
         {#if r.reason}<div class="small reason" class:bad={r.status !== 'approved'}>{r.reason}</div>{/if}
 
-        {#if r.progress && r.status !== 'pending'}
+        {#if r.progress && r.status !== 'pending' && isBook(r.type)}
+          <div class="muted small">
+            {r.progress.imported ? 'In your library' : r.progress.downloading ? 'Downloading' : 'Searching for it'}
+          </div>
+        {:else if r.progress && r.status !== 'pending' && r.type === 'movie'}
+          <div class="muted small">{movieProgress(r.progress)}</div>
+        {:else if r.progress && r.status !== 'pending'}
           <div class="progress">
             <div class="bar" class:good={r.status === 'available'}><div style="width: {pct(r.progress)}%"></div></div>
             <div class="muted small">
-              {#if isBook(r.type)}
-                {r.progress.imported ? 'In your library' : r.progress.downloading ? 'Downloading' : 'Searching for it'}
-              {:else}
-                {r.progress.imported} of {r.progress.episodes} episodes
-                {#if r.progress.downloading}· {r.progress.downloading} downloading{/if}
-              {/if}
+              {r.progress.imported} of {r.progress.episodes} episodes
+              {#if r.progress.downloading}· {r.progress.downloading} downloading{/if}
             </div>
           </div>
         {/if}

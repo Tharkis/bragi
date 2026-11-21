@@ -9,7 +9,7 @@ Bragi is one app for your media collection. Request a show, and Bragi finds it t
 | Indexers | Prowlarr, Jackett, any Newznab / Torznab URL | |
 | Download clients | NZBGet, qBittorrent | SABnzbd, Transmission, Deluge, slskd (Soulseek) |
 | Media | TV | Movies, music, books, audiobooks |
-| Requests | Web UI and REST API | Jellyfin plugin, Jellyseerr-compatible API |
+| Requests | Web UI, REST API, [Jellyfin plugin](jellyfin-plugin/README.md), Jellyseerr-compatible API | |
 
 ## Run it
 
@@ -63,6 +63,7 @@ Everything the UI does goes through the REST API under `/api/v1`. Scripts authen
 
 ```
 GET  /api/v1/discover/search?type=tv&q=   search TMDB, marked with what you already have
+GET  /api/v1/discover/trending?type=tv    this week's trending shows, marked the same way
 POST /api/v1/requests                     {"type":"tv","tmdbId":95396,"seasons":"all"|"latest"|"future"|[1,2]}
 GET  /api/v1/requests?mine=true&status=   requests with progress
 GET  /api/v1/requests/{id}                one request, with every episode's status
@@ -72,7 +73,11 @@ GET  /api/v1/series, /series/{id}         the library
 GET  /api/v1/activity/queue|history       downloads
 ```
 
-The Jellyfin plugin (coming later) signs in with one admin API key and sends the Jellyfin user's id in `X-Bragi-User` (and name in `X-Bragi-User-Name`). Bragi maps it to a requester account, created on first use, so requests carry the right name and go through approval.
+The [Jellyfin plugin](jellyfin-plugin/README.md) signs in with one admin API key and sends the Jellyfin user's id in `X-Bragi-User` (and name in `X-Bragi-User-Name`). Bragi maps it to a requester account, created on first use, so requests carry the right name and go through approval.
+
+### Jellyseerr-compatible API
+
+Tools written for Jellyseerr, such as Jellyfin Enhanced, can use Bragi instead: point them at `http://your-server:8787/seerr` with a Bragi admin API key. Bragi answers the request-related endpoints (status, users including `import-from-jellyfin` and `X-Api-User`, search, trending, show details, and requests), and returns 404 for the rest.
 
 ## Develop
 

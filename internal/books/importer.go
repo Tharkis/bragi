@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Tharkis/bragi/internal/integrations"
+	"github.com/Tharkis/bragi/internal/library"
 	"github.com/Tharkis/bragi/internal/store"
 )
 
@@ -176,9 +176,9 @@ func (s *Service) importDownload(ctx context.Context, d store.Download) error {
 		if best == "" {
 			return errors.New("the download has no ebook files")
 		}
-		name := cleanName(b.Title)
+		name := library.CleanName(b.Title)
 		if b.Author != "" {
-			name += " - " + cleanName(b.Author)
+			name += " - " + library.CleanName(b.Author)
 		}
 		plan = append(plan, move{best, filepath.Join(dir, name+strings.ToLower(filepath.Ext(best)))})
 	} else {
@@ -187,7 +187,7 @@ func (s *Service) importDownload(ctx context.Context, d store.Download) error {
 			return errors.New("the download has no audio files")
 		}
 		if len(audio) == 1 {
-			plan = append(plan, move{audio[0], filepath.Join(dir, cleanName(b.Title)+strings.ToLower(filepath.Ext(audio[0])))})
+			plan = append(plan, move{audio[0], filepath.Join(dir, library.CleanName(b.Title)+strings.ToLower(filepath.Ext(audio[0])))})
 		} else {
 			for _, f := range audio {
 				plan = append(plan, move{f, filepath.Join(dir, trackName(root, f))})
@@ -203,7 +203,7 @@ func (s *Service) importDownload(ctx context.Context, d store.Download) error {
 	var recorded []store.BookFile
 	newPaths := map[string]bool{}
 	for _, m := range plan {
-		if err := transfer(m.src, m.dest, keep); err != nil {
+		if err := library.Transfer(m.src, m.dest, keep); err != nil {
 			return fmt.Errorf("could not copy %s into the library: %w", filepath.Base(m.src), err)
 		}
 		newPaths[m.dest] = true
@@ -303,11 +303,11 @@ func audioFiles(files []string) []string {
 func trackName(root, f string) string {
 	rel, err := filepath.Rel(root, f)
 	if err != nil {
-		return cleanName(filepath.Base(f))
+		return library.CleanName(filepath.Base(f))
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	for i := range parts {
-		parts[i] = cleanName(parts[i])
+		parts[i] = library.CleanName(parts[i])
 	}
 	return strings.Join(parts, " - ")
 }
@@ -339,54 +339,4 @@ func coverImage(files []string) string {
 		}
 	}
 	return ""
-}
-
-// transfer places src at dest: a hardlink when the source must stay (a
-// torrent that seeds), otherwise a move. Either falls back to a copy across
-// file systems.
-func transfer(src, dest string, keepSource bool) error {
-	if err := os.MkdirAll(filepath.Dir(dest), 0o775); err != nil {
-		return err
-	}
-	if _, err := os.Stat(dest); err == nil {
-		if err := os.Remove(dest); err != nil {
-			return err
-		}
-	}
-	if keepSource {
-		if err := os.Link(src, dest); err == nil {
-			return nil
-		}
-		return copyFile(src, dest)
-	}
-	if err := os.Rename(src, dest); err == nil {
-		return nil
-	}
-	if err := copyFile(src, dest); err != nil {
-		return err
-	}
-	return os.Remove(src)
-}
-
-func copyFile(src, dest string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	tmp := dest + ".bragi-partial"
-	out, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := out.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, dest)
 }

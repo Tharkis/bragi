@@ -26,6 +26,9 @@ type Want struct {
 	Runtime int
 	// Blocklist holds release titles that failed before.
 	Blocklist map[string]bool
+	// Movie makes this a movie search: SeriesTitle and Year are the
+	// movie's, Runtime is the movie's length, and episodes do not apply.
+	Movie bool
 }
 
 // Candidate is a search result with Bragi's verdict on it.
@@ -66,6 +69,9 @@ func Evaluate(releases []integrations.Release, w Want, p Preset) []Candidate {
 }
 
 func reject(c Candidate, w Want, p Preset) string {
+	if w.Movie {
+		return rejectMovie(c, w, p)
+	}
 	switch {
 	case w.Blocklist[c.Title]:
 		return "Failed before"
@@ -86,6 +92,16 @@ func reject(c Candidate, w Want, p Preset) string {
 			return "Different episode"
 		}
 	}
+	eps := len(c.Info.Episodes)
+	if w.FullSeason || eps == 0 {
+		eps = len(w.Episodes)
+	}
+	return rejectQuality(c, p, w.Runtime*max(eps, 1))
+}
+
+// rejectQuality checks quality, seeders and the size cap for a release
+// that runs minutes long in total.
+func rejectQuality(c Candidate, p Preset, minutes int) string {
 	if c.Quality == "" {
 		return "Unknown quality"
 	}
@@ -95,20 +111,25 @@ func reject(c Candidate, w Want, p Preset) string {
 	if c.Protocol == integrations.Torrent && c.Seeders == 0 {
 		return "No seeders"
 	}
-	if p.MaxMBPerMin > 0 && w.Runtime > 0 && c.SizeBytes > 0 {
-		eps := len(c.Info.Episodes)
-		if w.FullSeason || eps == 0 {
-			eps = len(w.Episodes)
-		}
-		if eps == 0 {
-			eps = 1
-		}
-		limit := p.MaxMBPerMin * float64(w.Runtime) * float64(eps) * 1024 * 1024
+	if p.MaxMBPerMin > 0 && minutes > 0 && c.SizeBytes > 0 {
+		limit := p.MaxMBPerMin * float64(minutes) * 1024 * 1024
 		if float64(c.SizeBytes) > limit {
 			return fmt.Sprintf("Too big (%s, limit %s)", HumanSize(c.SizeBytes), HumanSize(int64(limit)))
 		}
 	}
 	return ""
+}
+
+func rejectMovie(c Candidate, w Want, p Preset) string {
+	switch {
+	case w.Blocklist[c.Title]:
+		return "Failed before"
+	case c.Info.IsTV():
+		return "TV episode, not a movie"
+	case !MatchesMovie(c.Info, w.SeriesTitle, w.Year):
+		return "Different movie"
+	}
+	return rejectQuality(c, p, w.Runtime)
 }
 
 // coversWanted reports whether a release holds at least one wanted episode

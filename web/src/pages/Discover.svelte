@@ -4,12 +4,13 @@
   import Poster from '../components/Poster.svelte'
   import Modal from '../components/Modal.svelte'
   import Badge from '../components/Badge.svelte'
-  import { requestStates } from '../lib/status.js'
+  import { requestStates, isBook } from '../lib/status.js'
   import BookDiscover from '../components/BookDiscover.svelte'
-  import MediaTabs from '../components/MediaTabs.svelte'
 
-  let { me, type = 'tv' } = $props()
+  let { me } = $props()
 
+  const kinds = { tv: 'TV shows', movie: 'Movies', book: 'Books', audiobook: 'Audiobooks' }
+  let kind = $state(readKind())
   let query = $state('')
   let results = $state(null)
   let loading = $state(false)
@@ -18,12 +19,32 @@
   let notice = $state('')
   let timer
 
+  function readKind() {
+    try {
+      const k = localStorage.getItem('bragi.discover')
+      return k in kinds ? k : 'tv'
+    } catch {
+      return 'tv'
+    }
+  }
+
+  function setKind(k) {
+    kind = k
+    notice = ''
+    try {
+      localStorage.setItem('bragi.discover', k)
+    } catch {}
+    results = null
+    search()
+  }
+
   function onInput() {
     clearTimeout(timer)
     timer = setTimeout(search, 350)
   }
 
   async function search(event) {
+    if (isBook(kind)) return // BookDiscover searches on its own
     event?.preventDefault()
     clearTimeout(timer)
     const q = query.trim()
@@ -34,7 +55,9 @@
     loading = true
     error = ''
     try {
-      results = await get('/discover/search?type=tv&q=' + encodeURIComponent(q))
+      const k = kind
+      const r = await get(`/discover/search?type=${k}&q=` + encodeURIComponent(q))
+      if (k === kind) results = r
     } catch (e) {
       error = e.message
     } finally {
@@ -48,6 +71,32 @@
   let chosen = $state([])
   let busy = $state(false)
   let requestError = $state('')
+
+  async function requestMovie(movie) {
+    busy = true
+    error = ''
+    try {
+      const r = await post('/requests', { type: 'movie', tmdbId: movie.tmdbId })
+      movie.requested = r.status
+      if (r.progress) movie.movieId = r.progress.movieId
+      notice =
+        r.status === 'pending'
+          ? r.reason
+            ? `${movie.title} is requested, but could not be added yet: ${r.reason}`
+            : `${movie.title} is requested. An admin will approve it.`
+          : `${movie.title} is added. Bragi is looking for it now.`
+    } catch (e) {
+      error = e.message
+    } finally {
+      busy = false
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10)
+  function movieNote(m) {
+    if (m.inCinemas && m.inCinemas > today) return 'Coming to cinemas ' + m.inCinemas
+    return ''
+  }
 
   async function openRequest(show) {
     picking = show
@@ -96,22 +145,26 @@
 <div class="page-head">
   <div>
     <h1>Discover</h1>
-    <p class="muted">Find something to watch, read or listen to and request it. Bragi does the rest.</p>
+    <p class="muted">Find a show or a movie and request it. Bragi does the rest.</p>
   </div>
 </div>
 
-<MediaTabs base="/discover" {type} />
+<div class="tabs">
+  {#each Object.entries(kinds) as [k, label] (k)}
+    <button class:active={kind === k} onclick={() => setKind(k)}>{label}</button>
+  {/each}
+</div>
 
-{#if type !== 'tv'}
-  {#key type}<BookDiscover {me} {type} />{/key}
+{#if isBook(kind)}
+  {#key kind}<BookDiscover {me} type={kind} />{/key}
 {:else}
 <form class="search" onsubmit={search}>
   <input
     type="search"
-    placeholder="Search for a TV show…"
+    placeholder={kind === 'movie' ? 'Search for a movie…' : 'Search for a TV show…'}
     bind:value={query}
     oninput={onInput}
-    aria-label="Search for a TV show"
+    aria-label={kind === 'movie' ? 'Search for a movie' : 'Search for a TV show'}
   />
 </form>
 
@@ -121,7 +174,29 @@
 {#if loading && !results}
   <p class="muted">Searching…</p>
 {:else if results && results.length === 0}
-  <div class="card empty muted">No shows match “{query}”.</div>
+  <div class="card empty muted">No {kind === 'movie' ? 'movies' : 'shows'} match “{query}”.</div>
+{:else if results && kind === 'movie'}
+  <div class="results">
+    {#each results as movie (movie.tmdbId)}
+      <div class="card result">
+        <Poster url={movie.posterUrl} title={movie.title} />
+        <div class="body">
+          <div class="title">{movie.title} {#if movie.year}<span class="muted">({movie.year})</span>{/if}</div>
+          <p class="muted small clamp">{movie.overview || 'No description yet.'}</p>
+          {#if movieNote(movie)}<p class="small muted note">{movieNote(movie)}</p>{/if}
+          <div class="row">
+            {#if movie.movieId}
+              <button onclick={() => navigate(`/movies/${movie.movieId}`)}>In your library</button>
+            {:else if movie.requested}
+              <Badge label={requestStates[movie.requested]?.[0] ?? movie.requested} tone={requestStates[movie.requested]?.[1]} />
+            {:else}
+              <button class="primary" disabled={busy} onclick={() => requestMovie(movie)}>Request</button>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {/each}
+  </div>
 {:else if results}
   <div class="results">
     {#each results as show (show.tmdbId)}
@@ -146,7 +221,7 @@
   </div>
 {:else}
   <div class="card empty muted">
-    <p>Type a show's name above.</p>
+    <p>Type a {kind === 'movie' ? "movie's" : "show's"} name above.</p>
     <p class="small">
       {me.role === 'admin' ? 'Your requests are added straight away.' : 'An admin approves requests before Bragi downloads anything.'}
     </p>
@@ -214,6 +289,9 @@
   .title {
     font-weight: 600;
     margin-bottom: 4px;
+  }
+  .note {
+    margin: 0 0 8px;
   }
   .seasons {
     margin: 4px 0 14px;
