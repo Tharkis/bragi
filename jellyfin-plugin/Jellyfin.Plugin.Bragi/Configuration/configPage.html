@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Bragi</title>
+</head>
+<body>
+    <div id="BragiConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="BragiConfigForm">
+                    <div class="verticalSection">
+                        <h2 class="sectionTitle">Bragi</h2>
+                        <p>Let everyone on this server find shows and request them from Bragi, without leaving Jellyfin. Requests carry each person's Jellyfin name, and go through Bragi's approval like any other request.</p>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Connection</h3>
+                        <div class="inputContainer">
+                            <input is="emby-input" type="url" id="BragiUrl" label="Bragi URL" placeholder="http://bragi:8787" />
+                            <div class="fieldDescription">Bragi's address as this Jellyfin server sees it.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <input is="emby-input" type="password" id="ApiKey" label="Bragi API key" autocomplete="off" />
+                            <div class="fieldDescription">An admin's key, from Settings, Account in Bragi. It stays on this server; browsers and apps never see it.</div>
+                        </div>
+                        <button is="emby-button" type="button" id="BragiTest" class="raised button-alt block"><span>Test connection</span></button>
+                        <p id="BragiTestResult" class="fieldDescription" style="min-height:1.5em"></p>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Web and mobile apps</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="EnableWebIntegration" />
+                                <span>Show Bragi in the web client</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Adds a Request button to the header and shows Bragi results under Jellyfin's own search results. Works in browsers, Jellyfin Media Player and the Android and iOS apps. Reload the page after changing this.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">TV apps</h3>
+                        <p>Apps on TVs and streaming boxes cannot show Bragi's search. Instead, the Request library lists this week's trending shows that Bragi does not have yet. Marking one as a favorite requests it.</p>
+                        <div class="inputContainer">
+                            <input is="emby-input" type="number" id="RequestLibraryPages" min="1" max="10" label="Pages of trending shows (20 per page)" />
+                        </div>
+                        <div class="inputContainer">
+                            <input is="emby-input" type="text" id="RequestLibraryPath" label="Placeholder folder (optional)" />
+                            <div class="fieldDescription">Leave empty to keep the placeholders in Jellyfin's data folder. They are tiny text files and posters, never video.</div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="EnableRequestLibrary" />
+                                <span>Keep the Request library up to date</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Refreshes every six hours. Turned on for you when you create the library.</div>
+                        </div>
+                        <button is="emby-button" type="button" id="BragiCreateLibrary" class="raised button-alt block"><span>Create Request library</span></button>
+                        <p id="BragiLibraryResult" class="fieldDescription" style="min-height:1.5em"></p>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button"><span>Save</span></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginId = '3688585a-857a-4a65-baf3-dd9e5ce22f48';
+                var page = document.querySelector('#BragiConfigPage');
+                function $(id) { return page.querySelector('#' + id); }
+
+                function post(path, body) {
+                    return ApiClient.ajax({
+                        type: 'POST', url: ApiClient.getUrl(path), dataType: 'json',
+                        contentType: 'application/json', data: JSON.stringify(body || {})
+                    });
+                }
+
+                page.addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (c) {
+                        $('BragiUrl').value = c.BragiUrl || '';
+                        $('ApiKey').value = c.ApiKey || '';
+                        $('EnableWebIntegration').checked = !!c.EnableWebIntegration;
+                        $('EnableRequestLibrary').checked = !!c.EnableRequestLibrary;
+                        $('RequestLibraryPages').value = c.RequestLibraryPages || 2;
+                        $('RequestLibraryPath').value = c.RequestLibraryPath || '';
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+                $('BragiTest').addEventListener('click', function () {
+                    $('BragiTestResult').textContent = 'Testing…';
+                    post('Bragi/Test', { url: $('BragiUrl').value, apiKey: $('ApiKey').value }).then(function (r) {
+                        $('BragiTestResult').textContent = (r.ok ? '✓ ' : '✗ ') + r.message;
+                    }, function () {
+                        $('BragiTestResult').textContent = '✗ The test failed. Check the Jellyfin log.';
+                    });
+                });
+
+                function save() {
+                    return ApiClient.getPluginConfiguration(pluginId).then(function (c) {
+                        c.BragiUrl = $('BragiUrl').value.trim();
+                        c.ApiKey = $('ApiKey').value.trim();
+                        c.EnableWebIntegration = $('EnableWebIntegration').checked;
+                        c.EnableRequestLibrary = $('EnableRequestLibrary').checked;
+                        c.RequestLibraryPages = parseInt($('RequestLibraryPages').value, 10) || 2;
+                        c.RequestLibraryPath = $('RequestLibraryPath').value.trim();
+                        return ApiClient.updatePluginConfiguration(pluginId, c);
+                    });
+                }
+
+                $('BragiCreateLibrary').addEventListener('click', function () {
+                    $('BragiLibraryResult').textContent = 'Saving and creating the library…';
+                    save().then(function () { return post('Bragi/RequestLibrary'); }).then(function (r) {
+                        $('BragiLibraryResult').textContent = (r.ok ? '✓ ' : '✗ ') + r.message;
+                        if (r.ok) { $('EnableRequestLibrary').checked = true; }
+                    }, function () {
+                        $('BragiLibraryResult').textContent = '✗ Could not create the library. Check the Jellyfin log.';
+                    });
+                });
+
+                $('BragiConfigForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    save().then(function (result) { Dashboard.processPluginConfigurationUpdateResult(result); });
+                    return false;
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -40,7 +41,11 @@ func (s *Server) withUser(next http.Handler) http.Handler {
 		// The Jellyfin plugin signs in with one admin key and names the
 		// Jellyfin user it acts for; Bragi maps that to a requester account.
 		if jf := strings.TrimSpace(r.Header.Get("X-Bragi-User")); jf != "" && u != nil && u.Role == "admin" && r.Header.Get("X-Api-Key") != "" {
+			// The plugin percent-encodes the name so it survives as a header.
 			name := strings.TrimSpace(r.Header.Get("X-Bragi-User-Name"))
+			if dec, err := url.PathUnescape(name); err == nil {
+				name = dec
+			}
 			if mapped, err := s.userForJellyfinID(r.Context(), jf, name); err == nil {
 				u = mapped
 			} else {
