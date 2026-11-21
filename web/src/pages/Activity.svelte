@@ -3,7 +3,7 @@
   import { get, del } from '../lib/api.js'
   import { link } from '../lib/router.svelte.js'
   import { onEvents } from '../lib/events.js'
-  import { downloadStates, when } from '../lib/status.js'
+  import { downloadStates, when, itemPath } from '../lib/status.js'
   import Poster from '../components/Poster.svelte'
   import Badge from '../components/Badge.svelte'
 
@@ -30,7 +30,7 @@
     load()
     // Progress is polled from the clients every 30 seconds; refetch then too.
     const t = setInterval(load, 15000)
-    const off = onEvents(['download', 'episodes', 'movie'], load, 250)
+    const off = onEvents(['download', 'episodes', 'movie', 'book'], load, 250)
     return () => {
       clearInterval(t)
       off()
@@ -78,7 +78,7 @@
       <div class="body">
         <div class="spread">
           <div class="what">
-            <a href={d.mediaType === 'movie' ? `/movies/${d.seriesId}` : `/library/${d.seriesId}`} onclick={link}
+            <a href={itemPath(d.mediaType, d.seriesId)} onclick={link}
               ><strong>{d.seriesTitle}</strong></a
             >
             <span class="muted">{d.mediaType === 'movie' ? 'Movie' : d.label}</span>

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tharkis/bragi/internal/books"
 	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/movies"
 	"github.com/Tharkis/bragi/internal/store"
@@ -27,6 +28,7 @@ type Server struct {
 	ui      fs.FS
 	mux     *http.ServeMux
 	tv      *tv.Service
+	books   *books.Service
 	movies  *movies.Service
 	events  *events.Hub
 }
@@ -42,6 +44,9 @@ type Options struct {
 	HTTPClient *http.Client
 	// TV runs the TV pipeline. Nil builds one that is not scheduled, for tests.
 	TV *tv.Service
+	// Books runs the ebook and audiobook pipeline. Nil builds one that is
+	// not scheduled, for tests.
+	Books *books.Service
 	// Movies runs the movie pipeline. Nil builds one that is not scheduled.
 	Movies *movies.Service
 	// Events carries live status changes to /api/v1/events.
@@ -66,8 +71,11 @@ func New(o Options) http.Handler {
 		o.Movies = movies.New(o.Store, o.HTTPClient, o.Logger, o.Events, o.TV.TMDB)
 		o.Movies.RefreshJellyfin = o.TV.RefreshJellyfin
 	}
+	if o.Books == nil {
+		o.Books = books.New(o.Store, o.HTTPClient, o.Logger, o.Events)
+	}
 	s := &Server{store: o.Store, log: o.Logger, version: o.Version, hc: o.HTTPClient, ui: o.UI, mux: http.NewServeMux(),
-		tv: o.TV, movies: o.Movies, events: o.Events}
+		tv: o.TV, movies: o.Movies, books: o.Books, events: o.Events}
 	s.routes()
 	return s.withUser(s.logRequests(s.mux))
 }
@@ -139,6 +147,14 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /api/v1/series/{id}/monitor", s.requireAdmin(s.handleMonitor))
 	m.HandleFunc("GET /api/v1/series/{id}/releases", s.requireAdmin(s.handleReleases))
 	m.HandleFunc("POST /api/v1/series/{id}/grab", s.requireAdmin(s.handleGrab))
+	m.HandleFunc("GET /api/v1/discover/book/{id}", s.requireUser(s.handleDiscoverBook))
+	m.HandleFunc("GET /api/v1/books", s.requireUser(s.handleListBooks))
+	m.HandleFunc("GET /api/v1/books/{id}", s.requireUser(s.handleGetBook))
+	m.HandleFunc("DELETE /api/v1/books/{id}", s.requireAdmin(s.handleDeleteBook))
+	m.HandleFunc("POST /api/v1/books/{id}/search", s.requireAdmin(s.handleSearchBook))
+	m.HandleFunc("PUT /api/v1/books/{id}/monitor", s.requireAdmin(s.handleMonitorBook))
+	m.HandleFunc("GET /api/v1/books/{id}/releases", s.requireAdmin(s.handleBookReleases))
+	m.HandleFunc("POST /api/v1/books/{id}/grab", s.requireAdmin(s.handleGrabBook))
 	m.HandleFunc("GET /api/v1/discover/movie/{id}", s.requireUser(s.handleDiscoverMovie))
 	m.HandleFunc("GET /api/v1/movies", s.requireUser(s.handleListMovies))
 	m.HandleFunc("GET /api/v1/movies/{id}", s.requireUser(s.handleGetMovie))

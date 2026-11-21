@@ -501,7 +501,7 @@ type Download struct {
 	PosterPath  string `json:"posterPath,omitempty"`
 	Label       string `json:"label"` // "S01E02", "Season 1"
 	ClientName  string `json:"clientName"`
-	// MediaType is the type of the item the download is for: tv, movie, ...
+	// MediaType is the type of the item the download is for: tv, movie, book, ...
 	MediaType string `json:"mediaType"`
 }
 
@@ -529,6 +529,13 @@ func scanDownload(row interface{ Scan(...any) error }) (*Download, error) {
 		return nil, mapErr(err)
 	}
 	switch level {
+	case "work":
+		switch d.MediaType {
+		case "book":
+			d.Label = "Ebook"
+		case "audiobook":
+			d.Label = "Audiobook"
+		}
 	case "unit":
 		d.Label = seasonTitle(num)
 	case "leaf":
@@ -611,11 +618,14 @@ func (s *Store) UpdateDownload(ctx context.Context, id int64, status string, pro
 
 // Request is someone asking for a show.
 type Request struct {
-	ID          int64  `json:"id"`
-	UserID      int64  `json:"userId"`
-	Username    string `json:"username"`
-	MediaType   string `json:"type"`
-	TMDBID      int64  `json:"tmdbId"`
+	ID        int64  `json:"id"`
+	UserID    int64  `json:"userId"`
+	Username  string `json:"username"`
+	MediaType string `json:"type"`
+	TMDBID    int64  `json:"tmdbId"`
+	// ForeignID is the Open Library work for books and audiobooks.
+	ForeignID   string `json:"bookId,omitempty"`
+	Author      string `json:"author,omitempty"`
 	Title       string `json:"title"`
 	Year        int    `json:"year,omitempty"`
 	PosterPath  string `json:"posterPath,omitempty"`
@@ -627,12 +637,12 @@ type Request struct {
 	UpdatedAt   string `json:"updatedAt"`
 }
 
-const requestCols = `r.id, r.user_id, COALESCE(u.username, ''), r.media_type, r.tmdb_id, r.title, r.year, r.poster_path, r.scope, r.status, r.reason,
+const requestCols = `r.id, r.user_id, COALESCE(u.username, ''), r.media_type, r.tmdb_id, r.foreign_id, r.author, r.title, r.year, r.poster_path, r.scope, r.status, r.reason,
 	COALESCE(r.media_item_id, 0), r.created_at, r.updated_at`
 
 func scanRequest(row interface{ Scan(...any) error }) (*Request, error) {
 	var r Request
-	if err := row.Scan(&r.ID, &r.UserID, &r.Username, &r.MediaType, &r.TMDBID, &r.Title, &r.Year, &r.PosterPath, &r.Scope, &r.Status, &r.Reason,
+	if err := row.Scan(&r.ID, &r.UserID, &r.Username, &r.MediaType, &r.TMDBID, &r.ForeignID, &r.Author, &r.Title, &r.Year, &r.PosterPath, &r.Scope, &r.Status, &r.Reason,
 		&r.MediaItemID, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return nil, mapErr(err)
 	}
@@ -641,8 +651,9 @@ func scanRequest(row interface{ Scan(...any) error }) (*Request, error) {
 
 // CreateRequest stores a request.
 func (s *Store) CreateRequest(ctx context.Context, r Request) (*Request, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO requests (user_id, media_type, tmdb_id, title, year, poster_path, scope, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.UserID, r.MediaType, r.TMDBID, r.Title, r.Year, r.PosterPath, r.Scope, r.Status)
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO requests (user_id, media_type, tmdb_id, foreign_id, author, title, year, poster_path, scope, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.UserID, r.MediaType, r.TMDBID, r.ForeignID, r.Author, r.Title, r.Year, r.PosterPath, r.Scope, r.Status)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -662,6 +673,8 @@ type RequestFilter struct {
 	TMDBID int64
 	// MediaType narrows to one type; TMDB ids of shows and movies overlap.
 	MediaType string
+	// ForeignID finds requests for a book or audiobook by Open Library id.
+	ForeignID string
 }
 
 // ListRequests returns requests, newest first.
@@ -683,6 +696,10 @@ func (s *Store) ListRequests(ctx context.Context, f RequestFilter) ([]Request, e
 	if f.MediaType != "" {
 		where = append(where, "r.media_type = ?")
 		args = append(args, f.MediaType)
+	}
+	if f.ForeignID != "" {
+		where = append(where, "r.foreign_id = ?")
+		args = append(args, f.ForeignID)
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT `+requestCols+` FROM requests r LEFT JOIN users u ON u.id = r.user_id
 		WHERE `+strings.Join(where, " AND ")+` ORDER BY r.id DESC LIMIT 500`, args...)

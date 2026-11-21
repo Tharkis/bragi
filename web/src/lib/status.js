@@ -49,6 +49,26 @@ export const downloadStates = {
   failed: ['Failed', 'bad'],
 }
 
+// Words for the two book media types.
+export const bookTypes = { book: 'Ebook', audiobook: 'Audiobook' }
+export const isBook = (type) => type === 'book' || type === 'audiobook'
+
+// bookState returns [label, tone] for a book.
+export function bookState(b) {
+  if (b.status === 'imported') return ['In library', 'good']
+  if (b.status === 'downloading' || b.downloading) return ['Downloading', 'accent']
+  if (b.status === 'searching') return ['Searching', 'accent']
+  if (!b.monitored) return ['Not monitored', '']
+  return ['Wanted', 'warn']
+}
+
+// itemPath links to the page of a show, movie or book.
+export function itemPath(type, id) {
+  if (type === 'movie') return `/movies/${id}`
+  if (isBook(type)) return `/books/${id}`
+  return `/library/${id}`
+}
+
 export function scopeLabel(seasons, type) {
   if (type === 'movie') return 'Movie'
   if (seasons === 'all' || seasons === undefined) return 'All seasons'

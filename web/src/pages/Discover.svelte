@@ -4,11 +4,12 @@
   import Poster from '../components/Poster.svelte'
   import Modal from '../components/Modal.svelte'
   import Badge from '../components/Badge.svelte'
-  import { requestStates } from '../lib/status.js'
+  import { requestStates, isBook } from '../lib/status.js'
+  import BookDiscover from '../components/BookDiscover.svelte'
 
   let { me } = $props()
 
-  const kinds = { tv: 'TV shows', movie: 'Movies' }
+  const kinds = { tv: 'TV shows', movie: 'Movies', book: 'Books', audiobook: 'Audiobooks' }
   let kind = $state(readKind())
   let query = $state('')
   let results = $state(null)
@@ -20,7 +21,8 @@
 
   function readKind() {
     try {
-      return localStorage.getItem('bragi.discover') === 'movie' ? 'movie' : 'tv'
+      const k = localStorage.getItem('bragi.discover')
+      return k in kinds ? k : 'tv'
     } catch {
       return 'tv'
     }
@@ -42,6 +44,7 @@
   }
 
   async function search(event) {
+    if (isBook(kind)) return // BookDiscover searches on its own
     event?.preventDefault()
     clearTimeout(timer)
     const q = query.trim()
@@ -152,6 +155,9 @@
   {/each}
 </div>
 
+{#if isBook(kind)}
+  {#key kind}<BookDiscover {me} type={kind} />{/key}
+{:else}
 <form class="search" onsubmit={search}>
   <input
     type="search"
@@ -220,6 +226,8 @@
       {me.role === 'admin' ? 'Your requests are added straight away.' : 'An admin approves requests before Bragi downloads anything.'}
     </p>
   </div>
+{/if}
+
 {/if}
 
 {#if picking}

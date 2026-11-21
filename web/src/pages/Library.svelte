@@ -5,6 +5,7 @@
   import { onEvents } from '../lib/events.js'
   import Poster from '../components/Poster.svelte'
   import { movieState } from '../lib/status.js'
+  import MediaTabs from '../components/MediaTabs.svelte'
 
   let { me, kind = 'tv' } = $props()
   const admin = me.role === 'admin'
@@ -70,10 +71,7 @@
   </div>
 </div>
 
-<div class="tabs">
-  <a href="/library" onclick={link} class:active={!movies}>TV shows</a>
-  <a href="/library/movies" onclick={link} class:active={movies}>Movies</a>
-</div>
+<MediaTabs base="/library" type={kind} />
 
 {#if error}<div class="notice bad">{error}</div>{/if}
 

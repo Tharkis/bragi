@@ -3,7 +3,7 @@
   import { get, post, del } from '../lib/api.js'
   import { link } from '../lib/router.svelte.js'
   import { onEvents } from '../lib/events.js'
-  import { requestStates, scopeLabel, when } from '../lib/status.js'
+  import { requestStates, scopeLabel, when, itemPath, isBook, bookTypes } from '../lib/status.js'
   import Poster from '../components/Poster.svelte'
   import Badge from '../components/Badge.svelte'
 
@@ -29,7 +29,7 @@
 
   onMount(() => {
     load()
-    return onEvents(['request', 'download', 'episodes', 'movie'], load)
+    return onEvents(['request', 'download', 'episodes', 'movie', 'book'], load)
   })
 
   const pending = $derived(requests.filter((r) => r.status === 'pending'))
@@ -58,7 +58,7 @@
     }
   }
 
-  const itemLink = (r) => (r.type === 'movie' ? `/movies/${r.progress.movieId}` : `/library/${r.progress.seriesId}`)
+  const itemLink = (r) => (r.type === 'movie' ? `/movies/${r.progress.movieId}` : itemPath(r.type, r.progress.seriesId))
 
   function movieProgress(p) {
     if (p.imported) return 'In the library'
@@ -112,7 +112,7 @@
               {#if r.year}<span class="muted">({r.year})</span>{/if}
             </div>
             <div class="muted small">
-              {scopeLabel(r.seasons, r.type)} · {admin ? `${r.username}, ` : ''}{when(r.createdAt)}
+              {isBook(r.type) ? `${bookTypes[r.type]}${r.author ? ' by ' + r.author : ''}` : scopeLabel(r.seasons, r.type)} · {admin ? `${r.username}, ` : ''}{when(r.createdAt)}
             </div>
           </div>
           <Badge {label} {tone} />
@@ -120,7 +120,11 @@
 
         {#if r.reason}<div class="small reason" class:bad={r.status !== 'approved'}>{r.reason}</div>{/if}
 
-        {#if r.progress && r.status !== 'pending' && r.type === 'movie'}
+        {#if r.progress && r.status !== 'pending' && isBook(r.type)}
+          <div class="muted small">
+            {r.progress.imported ? 'In your library' : r.progress.downloading ? 'Downloading' : 'Searching for it'}
+          </div>
+        {:else if r.progress && r.status !== 'pending' && r.type === 'movie'}
           <div class="muted small">{movieProgress(r.progress)}</div>
         {:else if r.progress && r.status !== 'pending'}
           <div class="progress">

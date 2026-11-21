@@ -59,13 +59,16 @@ type discoverResult struct {
 
 func (s *Server) handleDiscoverSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	switch r.URL.Query().Get("type") {
+	switch t := r.URL.Query().Get("type"); t {
 	case "", "tv":
 	case "movie":
 		s.handleDiscoverMovies(w, r)
 		return
+	case "book", "audiobook":
+		s.handleDiscoverBooks(w, r, t)
+		return
 	default:
-		writeError(w, http.StatusBadRequest, "type must be tv or movie")
+		writeError(w, http.StatusBadRequest, "type must be tv, movie, book or audiobook")
 		return
 	}
 	if q == "" {
@@ -129,6 +132,8 @@ type requestBody struct {
 	Type   string          `json:"type"`
 	TMDBID int64           `json:"tmdbId"`
 	Scope  json.RawMessage `json:"seasons"`
+	// BookID is the Open Library work, for type book or audiobook.
+	BookID string `json:"bookId"`
 }
 
 type requestProgress struct {
@@ -150,6 +155,9 @@ type requestResponse struct {
 }
 
 func (s *Server) toRequestResponse(ctx context.Context, rq store.Request, withEpisodes bool) requestResponse {
+	if store.IsBookType(rq.MediaType) {
+		return s.bookRequestResponse(ctx, rq)
+	}
 	out := requestResponse{Request: rq, PosterURL: posterURL(rq.PosterPath, "w185")}
 	if rq.MediaType == "movie" {
 		return s.movieRequestResponse(ctx, out)
@@ -185,12 +193,16 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 	if in.Type == "" {
 		in.Type = "tv"
 	}
+	if store.IsBookType(in.Type) {
+		s.createBookRequest(w, r, in)
+		return
+	}
 	if in.Type == "movie" {
 		s.createMovieRequest(w, r, in)
 		return
 	}
 	if in.Type != "tv" {
-		writeError(w, http.StatusBadRequest, "type must be tv or movie")
+		writeError(w, http.StatusBadRequest, "type must be tv, movie, book or audiobook")
 		return
 	}
 	if in.TMDBID <= 0 {
@@ -239,6 +251,9 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 // request stays pending with the reason, so an admin can fix the cause and
 // approve again.
 func (s *Server) approve(ctx context.Context, rq *store.Request, reason string) (*store.Request, error) {
+	if store.IsBookType(rq.MediaType) {
+		return s.approveBook(ctx, rq, reason)
+	}
 	if rq.MediaType == "movie" {
 		return s.approveMovie(ctx, rq, reason)
 	}
@@ -333,6 +348,10 @@ func (s *Server) handleApproveRequest(w http.ResponseWriter, r *http.Request) {
 	out, err := s.approve(r.Context(), rq, in.Reason)
 	s.events.Publish(eventRequest(out))
 	if err != nil {
+		if store.IsBookType(rq.MediaType) {
+			s.bookError(w, err)
+			return
+		}
 		s.metadataError(w, err)
 		return
 	}
@@ -664,7 +683,11 @@ type downloadResponse struct {
 func toDownloads(ds []store.Download) []downloadResponse {
 	out := make([]downloadResponse, 0, len(ds))
 	for _, d := range ds {
-		out = append(out, downloadResponse{Download: d, Size: release.HumanSize(d.SizeBytes), PosterURL: posterURL(d.PosterPath, "w92")})
+		p := posterURL(d.PosterPath, "w92")
+		if store.IsBookType(d.MediaType) {
+			p = coverURL(d.PosterPath, "S")
+		}
+		out = append(out, downloadResponse{Download: d, Size: release.HumanSize(d.SizeBytes), PosterURL: p})
 	}
 	return out
 }
@@ -695,8 +718,13 @@ func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cancel := s.tv.Cancel
-	if d, err := s.store.GetDownload(r.Context(), id); err == nil && d.MediaType == "movie" {
-		cancel = s.movies.Cancel
+	if d, err := s.store.GetDownload(r.Context(), id); err == nil {
+		switch {
+		case store.IsBookType(d.MediaType):
+			cancel = func(ctx context.Context, _ int64) error { return s.books.Cancel(ctx, d) }
+		case d.MediaType == "movie":
+			cancel = s.movies.Cancel
+		}
 	}
 	if err := cancel(r.Context(), id); err != nil {
 		s.storeError(w, err, "download")

@@ -73,10 +73,15 @@ func (n *newznab) Test(ctx context.Context) error {
 
 // searchParams picks the Newznab search function and categories for a
 // media type.
-func searchParams(q Query) (t string, cats []string) {
+func searchParams(q Query) (fn string, cats []string) {
 	switch q.MediaType {
 	case "movie":
 		return "movie", []string{"2000"}
+	case "book":
+		// Books, and the Ebook subcategory some indexers use on its own.
+		return "search", []string{"7000", "7020"}
+	case "audiobook":
+		return "search", []string{"3030"}
 	}
 	return "tvsearch", []string{"5000"}
 }
