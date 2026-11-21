@@ -1,0 +1,126 @@
+/* Bragi in the Jellyfin web client. Colours follow Jellyfin's dark theme and
+   inherit its font, so the panel reads as part of Jellyfin. */
+.bragi-hidden { display: none !important; }
+body.bragi-open { overflow: hidden; }
+
+.bragi-icon { width: 1.5em; height: 1.5em; display: block; }
+
+.bragi-panel {
+    position: fixed; inset: 0; z-index: 1100; overflow-y: auto;
+    background: #101010; color: #eee;
+    padding: 0 max(16px, 3vw) 48px;
+}
+.bragi-panel-head {
+    position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 1.5em;
+    padding: 14px 0 10px; background: #101010;
+}
+.bragi-panel-head h2 { margin: 0; font-size: 1.6em; font-weight: 500; }
+.bragi-tabs { display: flex; gap: 0.3em; flex: 1; }
+.bragi-tab {
+    background: none; border: 0; color: rgba(255, 255, 255, 0.7); font: inherit; font-size: 1em;
+    padding: 0.5em 0.9em; border-radius: 99px; cursor: pointer;
+}
+.bragi-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.bragi-tab-active { color: #fff; background: rgba(0, 164, 220, 0.25); }
+.bragi-close {
+    margin-left: auto;
+    background: none; border: 0; color: #fff; cursor: pointer; padding: 0.3em; border-radius: 50%;
+    display: inline-flex;
+}
+.bragi-close:hover { background: rgba(255, 255, 255, 0.1); }
+
+.bragi-search {
+    width: 100%; max-width: 40em; box-sizing: border-box; margin: 6px 0 4px;
+    padding: 0.7em 1em; font: inherit; font-size: 1.05em; color: #fff;
+    background: #292929; border: 1px solid #383838; border-radius: 6px;
+}
+.bragi-search:focus { outline: none; border-color: #00a4dc; }
+
+.bragi-section-title { font-weight: 500; font-size: 1.2em; margin: 1.2em 0 0.8em; }
+.bragi-muted { color: rgba(255, 255, 255, 0.6); font-size: 0.92em; margin: 0.4em 0; }
+.bragi-error { color: #ff8a80; margin: 0.6em 0; }
+
+.bragi-grid {
+    display: grid; gap: 1.2em 1em;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+.bragi-card { display: flex; flex-direction: column; min-width: 0; }
+.bragi-poster {
+    position: relative; aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden;
+    background: #262626; display: flex; align-items: center; justify-content: center;
+}
+.bragi-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bragi-poster-fallback { padding: 1em; text-align: center; color: rgba(255, 255, 255, 0.7); }
+.bragi-card-body { padding-top: 0.5em; display: flex; flex-direction: column; align-items: flex-start; gap: 0.25em; }
+.bragi-card-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.bragi-card-year { color: rgba(255, 255, 255, 0.6); font-size: 0.9em; min-height: 1.1em; }
+
+.bragi-request-btn { margin: 0.25em 0 0 !important; padding: 0.45em 1.1em !important; font-size: 0.9em !important; }
+.bragi-badge {
+    display: inline-block; margin-top: 0.3em; padding: 0.25em 0.7em; border-radius: 10px;
+    font-size: 0.82em; font-weight: 500; max-width: 100%; box-sizing: border-box;
+}
+.bragi-ok { background: rgba(82, 181, 75, 0.2); color: #8fdc8a; }
+.bragi-busy { background: rgba(0, 164, 220, 0.2); color: #7fd3f2; }
+.bragi-wait { background: rgba(255, 193, 7, 0.18); color: #ffd36b; }
+.bragi-bad { background: rgba(244, 67, 54, 0.18); color: #ff8a80; }
+
+.bragi-rows { display: flex; flex-direction: column; gap: 0.6em; margin-top: 1em; max-width: 52em; }
+.bragi-row {
+    display: flex; align-items: center; gap: 1em; padding: 0.6em; border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+}
+.bragi-row img, .bragi-row-noimg { width: 46px; height: 69px; object-fit: cover; border-radius: 4px; background: #262626; flex: none; }
+.bragi-row-main { flex: 1; min-width: 0; }
+.bragi-small { margin: 0 !important; padding: 0.4em 0.9em !important; font-size: 0.85em !important; }
+
+.bragi-dialog-overlay {
+    position: fixed; inset: 0; z-index: 1200; background: rgba(0, 0, 0, 0.6);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.bragi-dialog {
+    width: 100%; max-width: 30em; max-height: 90vh; overflow-y: auto; box-sizing: border-box;
+    background: #202020; color: #eee; border-radius: 10px; padding: 1.4em;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.bragi-dialog-head { display: flex; gap: 1em; }
+.bragi-dialog-head img { width: 80px; height: 120px; object-fit: cover; border-radius: 6px; flex: none; }
+.bragi-dialog-head h3 { margin: 0 0 0.3em; font-weight: 500; }
+.bragi-overview {
+    margin: 0; color: rgba(255, 255, 255, 0.7); font-size: 0.9em;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.bragi-options { display: flex; flex-direction: column; gap: 0.4em; margin: 1.2em 0 0.4em; }
+.bragi-option {
+    display: flex; gap: 0.7em; align-items: flex-start; padding: 0.6em 0.7em; border-radius: 6px; cursor: pointer;
+    background: rgba(255, 255, 255, 0.04);
+}
+.bragi-option:hover { background: rgba(255, 255, 255, 0.08); }
+.bragi-option input { margin-top: 0.2em; accent-color: #00a4dc; }
+.bragi-option span { display: flex; flex-direction: column; }
+.bragi-option strong { font-weight: 500; }
+.bragi-option small { color: rgba(255, 255, 255, 0.6); }
+.bragi-seasons { display: flex; flex-wrap: wrap; gap: 0.4em 1em; padding: 0.3em 0.7em 0.3em 2.2em; }
+.bragi-season { display: flex; gap: 0.4em; align-items: center; cursor: pointer; }
+.bragi-season input { accent-color: #00a4dc; }
+.bragi-dialog-actions { display: flex; justify-content: flex-end; gap: 0.6em; margin-top: 1em; }
+.bragi-dialog-actions button { margin: 0 !important; }
+
+.bragi-search-section { margin-top: 1.5em; }
+.bragi-search-section .bragi-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+.bragi-toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); z-index: 1300;
+    background: #333; color: #fff; padding: 0.8em 1.2em; border-radius: 6px; opacity: 0;
+    transition: opacity 0.25s, transform 0.25s; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); max-width: 90vw;
+}
+.bragi-toast-show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 600px) {
+    .bragi-panel-head { flex-wrap: wrap; gap: 0.5em; }
+    .bragi-tabs { order: 3; flex-basis: 100%; }
+    .bragi-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 1em 0.7em; }
+    .bragi-row { flex-wrap: wrap; }
+}
+
+.bragi-header-btn-mui .bragi-icon { width: 24px; height: 24px; }

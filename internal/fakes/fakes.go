@@ -119,6 +119,7 @@ func TMDB() http.Handler {
 		}
 		writeJSON(w, map[string]any{"results": results})
 	})
+	m.HandleFunc("/3/trending/tv/week", trendingTV)
 	reSeason := regexp.MustCompile(`^/3/tv/(\d+)/season/(\d+)$`)
 	reShow := regexp.MustCompile(`^/3/tv/(\d+)$`)
 	m.HandleFunc("/3/tv/", func(w http.ResponseWriter, r *http.Request) {
