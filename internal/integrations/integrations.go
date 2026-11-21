@@ -62,21 +62,33 @@ type Query struct {
 
 // Release is one search result.
 type Release struct {
-	Title       string
-	GUID        string
-	DownloadURL string
-	Protocol    Protocol
-	SizeBytes   int64
-	Seeders     int
-	PublishedAt time.Time
-	Indexer     string
+	Title       string    `json:"title"`
+	GUID        string    `json:"guid"`
+	DownloadURL string    `json:"downloadUrl"`
+	InfoHash    string    `json:"infoHash,omitempty"`
+	Protocol    Protocol  `json:"protocol"`
+	SizeBytes   int64     `json:"sizeBytes"`
+	Seeders     int       `json:"seeders"`
+	PublishedAt time.Time `json:"publishedAt"`
+	Indexer     string    `json:"indexer"`
 }
+
+// Job states every client maps onto.
+const (
+	JobQueued      = "queued"
+	JobDownloading = "downloading"
+	JobCompleted   = "completed"
+	JobFailed      = "failed"
+	// JobMissing means the client no longer knows the job.
+	JobMissing = "missing"
+)
 
 // Job is a download as the client reports it.
 type Job struct {
-	ID         string
-	State      string
-	Progress   float64
+	ID       string
+	State    string
+	Progress float64 // 0 to 1
+	// OutputPath is the finished file or folder, as the client sees it.
 	OutputPath string
 	Error      string
 }
@@ -203,4 +215,21 @@ func do(hc *http.Client, req *http.Request) (*http.Response, error) {
 func readBody(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
 	return io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+}
+
+// fetch downloads a small file (an NZB or a .torrent) that an indexer links.
+func fetch(ctx context.Context, hc *http.Client, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := do(hc, req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("%s answered HTTP %d", req.URL.Host, resp.StatusCode)
+	}
+	return readBody(resp)
 }

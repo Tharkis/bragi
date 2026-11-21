@@ -18,7 +18,9 @@ import (
 	"github.com/Tharkis/bragi/internal/api"
 	"github.com/Tharkis/bragi/internal/config"
 	"github.com/Tharkis/bragi/internal/db"
+	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/store"
+	"github.com/Tharkis/bragi/internal/tv"
 	"github.com/Tharkis/bragi/web"
 )
 
@@ -69,9 +71,17 @@ func run() error {
 
 	go backupLoop(ctx, log, d, filepath.Join(cfg.ConfigDir, "backups"))
 
+	st := store.New(d)
+	hub := events.NewHub()
+	hc := &http.Client{Timeout: 60 * time.Second}
+	pipeline := tv.New(st, hc, log, hub)
+	pipeline.TMDBKey = cfg.TMDBKey
+	go pipeline.Run(ctx)
+
 	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           api.New(api.Options{Store: store.New(d), Logger: log, Version: version, UI: ui}),
+		Addr: fmt.Sprintf(":%d", cfg.Port),
+		Handler: api.New(api.Options{Store: st, Logger: log, Version: version, UI: ui,
+			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Events: hub}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

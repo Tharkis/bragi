@@ -125,3 +125,48 @@ th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--bor
 th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
 td.actions { text-align: right; white-space: nowrap; }
 code { font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+/* ---- TV screens ---- */
+:root {
+  --warn: #b35c00;
+  --warn-soft: #fff1e0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --warn: #ffb35c;
+    --warn-soft: #3a2a14;
+  }
+}
+.badge.good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.badge.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.badge.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.badge.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.page-head h1 { margin: 0; }
+.page-head p { margin: 2px 0 0; }
+
+.poster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 18px;
+}
+.poster-grid a { color: inherit; text-decoration: none; }
+.poster-grid .title { font-weight: 600; margin-top: 8px; line-height: 1.3; }
+
+.bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.4s; }
+.bar.good > div { background: var(--good); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 20px; overflow-x: auto; }
+.tabs a, .tabs button { padding: 8px 12px; color: var(--muted); text-decoration: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; white-space: nowrap; }
+.tabs .active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+.empty { text-align: center; padding: 40px 20px; }
+.empty p { margin: 0 0 12px; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+.choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.choice input { width: auto; margin-top: 4px; }
+.choice span { font-weight: 400; margin: 0; display: block; }
+.choice strong { display: block; }

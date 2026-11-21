@@ -7,6 +7,11 @@
   import Wizard from './pages/Wizard.svelte'
   import Settings from './pages/Settings.svelte'
   import Placeholder from './pages/Placeholder.svelte'
+  import Discover from './pages/Discover.svelte'
+  import Library from './pages/Library.svelte'
+  import Series from './pages/Series.svelte'
+  import Activity from './pages/Activity.svelte'
+  import Requests from './pages/Requests.svelte'
 
   let status = $state(null)
   let me = $state(null)
@@ -54,6 +59,8 @@
     if (inShell && route.path === '/') navigate('/discover', true)
   })
 
+  const seriesId = $derived(route.path.match(/^\/library\/(\d+)$/)?.[1])
+
   const active = (path) => route.path === path || route.path.startsWith(path + '/')
 </script>
 
@@ -99,6 +106,16 @@
     <main>
       {#if active('/settings') && me.role === 'admin'}
         <Settings {me} />
+      {:else if route.path === '/discover'}
+        <Discover {me} />
+      {:else if route.path === '/library'}
+        <Library {me} />
+      {:else if seriesId}
+        {#key seriesId}<Series id={seriesId} {me} />{/key}
+      {:else if route.path === '/activity' || route.path === '/activity/history'}
+        <Activity {me} tab={route.path === '/activity/history' ? 'history' : 'queue'} />
+      {:else if route.path === '/requests'}
+        <Requests {me} />
       {:else}
         <Placeholder path={route.path} />
       {/if}
@@ -151,10 +168,11 @@
     padding: 28px 32px;
     max-width: 1000px;
     width: 100%;
+    min-width: 0;
   }
   @media (max-width: 720px) {
     .shell {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-rows: auto 1fr;
     }
     aside {
@@ -171,6 +189,7 @@
     nav {
       flex-direction: row;
       overflow-x: auto;
+      min-width: 0;
       order: 3;
       flex-basis: 100%;
     }
