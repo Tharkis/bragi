@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Tharkis/bragi/internal/library"
 	"github.com/Tharkis/bragi/internal/metadata"
 	"github.com/Tharkis/bragi/internal/release"
 	"github.com/Tharkis/bragi/internal/store"
@@ -147,7 +148,7 @@ func (s *Service) adopt(ctx context.Context, lib *store.Library, folder string) 
 	if err != nil {
 		return "", 0, err
 	}
-	files := videoFiles(filepath.Join(lib.Path, folder))
+	files := library.VideoFiles(filepath.Join(lib.Path, folder))
 	sort.Strings(files)
 	linked := 0
 	for _, m := range matchFiles(files, eps, eps) {

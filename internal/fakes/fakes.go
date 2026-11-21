@@ -1,5 +1,5 @@
-// Package fakes provides in-process stand-ins for TMDB, Prowlarr, NZBGet
-// and qBittorrent. Tests use them to run the whole TV pipeline without a
+// Package fakes provides in-process stand-ins for TMDB, Prowlarr, NZBGet,
+// SABnzbd and qBittorrent. Tests use them to run the whole TV pipeline without a
 // network, and `go run ./internal/fakes/cmd` serves them for UI work.
 package fakes
 
@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -162,14 +163,25 @@ func TMDB() http.Handler {
 		http.NotFound(w, r)
 	})
 	m.HandleFunc("/t/p/", func(w http.ResponseWriter, r *http.Request) {
-		id, _ := strconv.Atoi(strings.TrimSuffix(filepath.Base(r.URL.Path), ".svg"))
-		s := findShow(id)
-		if s == nil {
+		base := strings.TrimSuffix(filepath.Base(r.URL.Path), ".svg")
+		var name, color string
+		if strings.HasPrefix(base, "m") {
+			id, _ := strconv.Atoi(base[1:])
+			if mv := findMovie(id); mv != nil {
+				name, color = mv.Title, mv.Color
+			}
+		} else {
+			id, _ := strconv.Atoi(base)
+			if s := findShow(id); s != nil {
+				name, color = s.Name, s.Color
+			}
+		}
+		if name == "" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "image/svg+xml")
-		words := strings.Fields(s.Name)
+		words := strings.Fields(name)
 		var lines strings.Builder
 		for i, word := range words {
 			fmt.Fprintf(&lines, `<text x="20" y="%d" font-family="Georgia, serif" font-size="34" fill="#fff">%s</text>`, 330+i*40, html.EscapeString(word))
@@ -177,8 +189,9 @@ func TMDB() http.Handler {
 		fmt.Fprintf(w, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 450"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">`+
 			`<stop offset="0" stop-color="%s"/><stop offset="1" stop-color="#111"/></linearGradient></defs>`+
 			`<rect width="300" height="450" fill="url(#g)"/><circle cx="220" cy="110" r="60" fill="#fff" opacity="0.12"/>%s</svg>`,
-			s.Color, lines.String())
+			color, lines.String())
 	})
+	movieRoutes(m)
 	return m
 }
 
@@ -195,6 +208,10 @@ func Prowlarr(base func() string) http.Handler {
 	})
 	m.HandleFunc("/api/v1/search", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("query")
+		if slices.Contains(r.URL.Query()["categories"], "2000") {
+			writeJSON(w, movieReleases(q, base()))
+			return
+		}
 		mm := reQuery.FindStringSubmatch(q)
 		out := []map[string]any{}
 		if mm == nil {

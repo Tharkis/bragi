@@ -501,6 +501,8 @@ type Download struct {
 	PosterPath  string `json:"posterPath,omitempty"`
 	Label       string `json:"label"` // "S01E02", "Season 1"
 	ClientName  string `json:"clientName"`
+	// MediaType is the type of the item the download is for: tv, movie, ...
+	MediaType string `json:"mediaType"`
 }
 
 const downloadCols = `d.id, COALESCE(d.media_item_id, 0), COALESCE(d.download_client_id, 0), d.client_job_id, d.release_title, d.protocol,
@@ -509,7 +511,7 @@ const downloadCols = `d.id, COALESCE(d.media_item_id, 0), COALESCE(d.download_cl
 	COALESCE(CASE m.level WHEN 'work' THEN m.id WHEN 'unit' THEN p.id ELSE g.id END, 0),
 	COALESCE(CASE m.level WHEN 'work' THEN m.title WHEN 'unit' THEN p.title ELSE g.title END, ''),
 	COALESCE(CASE m.level WHEN 'work' THEN m.poster_path WHEN 'unit' THEN p.poster_path ELSE g.poster_path END, ''),
-	COALESCE(c.name, '')`
+	COALESCE(c.name, ''), COALESCE(m.media_type, '')`
 
 const downloadFrom = ` FROM downloads d
 	LEFT JOIN media_items m ON m.id = d.media_item_id
@@ -523,7 +525,7 @@ func scanDownload(row interface{ Scan(...any) error }) (*Download, error) {
 	var num, parentNum int
 	if err := row.Scan(&d.ID, &d.MediaItemID, &d.DownloadClientID, &d.ClientJobID, &d.ReleaseTitle, &d.Protocol, &d.Indexer,
 		&d.SizeBytes, &d.Quality, &d.Status, &d.Progress, &d.OutputPath, &d.Error, &d.CreatedAt, &d.UpdatedAt,
-		&level, &num, &parentNum, &d.SeriesID, &d.SeriesTitle, &d.PosterPath, &d.ClientName); err != nil {
+		&level, &num, &parentNum, &d.SeriesID, &d.SeriesTitle, &d.PosterPath, &d.ClientName, &d.MediaType); err != nil {
 		return nil, mapErr(err)
 	}
 	switch level {
@@ -585,6 +587,12 @@ func (s *Store) GetDownload(ctx context.Context, id int64) (*Download, error) {
 // ActiveDownloads returns downloads that are not finished, oldest first.
 func (s *Store) ActiveDownloads(ctx context.Context) ([]Download, error) {
 	return s.queryDownloads(ctx, `d.status IN ('queued', 'downloading', 'completed', 'importing') ORDER BY d.id`)
+}
+
+// ActiveDownloadsOf returns the unfinished downloads for one media type,
+// oldest first. Each media type's pipeline polls only its own.
+func (s *Store) ActiveDownloadsOf(ctx context.Context, mediaType string) ([]Download, error) {
+	return s.queryDownloads(ctx, `d.status IN ('queued', 'downloading', 'completed', 'importing') AND m.media_type = ? ORDER BY d.id`, mediaType)
 }
 
 // DownloadHistory returns finished downloads, newest first.
@@ -652,6 +660,8 @@ type RequestFilter struct {
 	UserID int64 // 0 for everyone
 	Status string
 	TMDBID int64
+	// MediaType narrows to one type; TMDB ids of shows and movies overlap.
+	MediaType string
 }
 
 // ListRequests returns requests, newest first.
@@ -669,6 +679,10 @@ func (s *Store) ListRequests(ctx context.Context, f RequestFilter) ([]Request, e
 	if f.TMDBID != 0 {
 		where = append(where, "r.tmdb_id = ?")
 		args = append(args, f.TMDBID)
+	}
+	if f.MediaType != "" {
+		where = append(where, "r.media_type = ?")
+		args = append(args, f.MediaType)
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT `+requestCols+` FROM requests r LEFT JOIN users u ON u.id = r.user_id
 		WHERE `+strings.Join(where, " AND ")+` ORDER BY r.id DESC LIMIT 500`, args...)

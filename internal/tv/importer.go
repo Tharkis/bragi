@@ -4,15 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/Tharkis/bragi/internal/integrations"
+	"github.com/Tharkis/bragi/internal/library"
 	"github.com/Tharkis/bragi/internal/release"
 	"github.com/Tharkis/bragi/internal/store"
 )
@@ -20,7 +18,7 @@ import (
 // PollDownloads asks each download client about Bragi's active downloads,
 // records progress, imports finished ones and retries failed ones.
 func (s *Service) PollDownloads(ctx context.Context) error {
-	active, err := s.Store.ActiveDownloads(ctx)
+	active, err := s.Store.ActiveDownloadsOf(ctx, "tv")
 	if err != nil || len(active) == 0 {
 		return err
 	}
@@ -169,7 +167,7 @@ func (s *Service) importDownload(ctx context.Context, d store.Download) error {
 
 	files := []string{d.OutputPath}
 	if info.IsDir() {
-		files = videoFiles(d.OutputPath)
+		files = library.VideoFiles(d.OutputPath)
 	}
 	if len(files) == 0 {
 		return errors.New("the download has no video files")
@@ -184,7 +182,7 @@ func (s *Service) importDownload(ctx context.Context, d store.Download) error {
 	imported := 0
 	for _, m := range matches {
 		dest := filepath.Join(lib.Path, sr.Folder, seasonFolder(m.eps[0].Season), episodeFileName(sr, m.eps, q, m.path))
-		if err := s.transfer(m.path, dest, d.Protocol == string(integrations.Torrent)); err != nil {
+		if err := library.Transfer(m.path, dest, d.Protocol == string(integrations.Torrent)); err != nil {
 			return fmt.Errorf("could not copy %s into the library: %w", filepath.Base(m.path), err)
 		}
 		st, _ := os.Stat(dest)
@@ -263,26 +261,6 @@ func matchFiles(files []string, all, wanted []store.Episode) []fileMatch {
 	return out
 }
 
-// videoFiles lists the video files under dir, skipping samples and extras.
-func videoFiles(dir string) []string {
-	var out []string
-	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !release.IsVideo(p) {
-			return nil
-		}
-		lower := strings.ToLower(p)
-		if strings.Contains(lower, "sample") || strings.Contains(lower, "/extras/") || strings.Contains(lower, "/featurettes/") {
-			if fi, err := d.Info(); err == nil && fi.Size() < 300<<20 {
-				return nil
-			}
-		}
-		out = append(out, p)
-		return nil
-	})
-	sort.Strings(out)
-	return out
-}
-
 func seasonFolder(n int) string {
 	if n == 0 {
 		return "Specials"
@@ -297,7 +275,7 @@ func episodeFileName(sr *store.Series, eps []store.Episode, quality, src string)
 		code += fmt.Sprintf("-E%02d", eps[len(eps)-1].Number)
 	}
 	name := sr.Folder + " - " + code
-	if t := cleanName(eps[0].Title); t != "" && !strings.HasPrefix(strings.ToLower(t), "episode ") {
+	if t := library.CleanName(eps[0].Title); t != "" && !strings.HasPrefix(strings.ToLower(t), "episode ") {
 		if len(t) > 80 {
 			t = t[:80]
 		}
@@ -307,56 +285,6 @@ func episodeFileName(sr *store.Series, eps []store.Episode, quality, src string)
 		name += " [" + quality + "]"
 	}
 	return name + strings.ToLower(filepath.Ext(src))
-}
-
-// transfer places src at dest. Torrents are hardlinked so they keep
-// seeding; Usenet downloads are moved. Either falls back to a copy when the
-// paths are on different file systems.
-func (s *Service) transfer(src, dest string, keepSource bool) error {
-	if err := os.MkdirAll(filepath.Dir(dest), 0o775); err != nil {
-		return err
-	}
-	if fileExists(dest) {
-		if err := os.Remove(dest); err != nil {
-			return err
-		}
-	}
-	if keepSource {
-		if err := os.Link(src, dest); err == nil {
-			return nil
-		}
-		return copyFile(src, dest)
-	}
-	if err := os.Rename(src, dest); err == nil {
-		return nil
-	}
-	if err := copyFile(src, dest); err != nil {
-		return err
-	}
-	return os.Remove(src)
-}
-
-func copyFile(src, dest string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	tmp := dest + ".bragi-partial"
-	out, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := out.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, dest)
 }
 
 // Cancel removes a download from its client, blocklists the release and

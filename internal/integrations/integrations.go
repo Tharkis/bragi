@@ -56,6 +56,8 @@ type Query struct {
 	Text      string
 	TMDBID    int
 	TVDBID    int
+	IMDBID    string // "tt1234567", used for movies
+	Year      int    // release year, used for movies
 	Season    int
 	Episode   int
 }
@@ -133,7 +135,7 @@ var (
 	fieldAPIKey   = Field{Name: "apiKey", Label: "API key", Type: "password", Required: true}
 	fieldUsername = Field{Name: "username", Label: "Username", Type: "text"}
 	fieldPassword = Field{Name: "password", Label: "Password", Type: "password"}
-	fieldCategory = Field{Name: "category", Label: "Category", Type: "text", Placeholder: "tv",
+	fieldCategory = Field{Name: "category", Label: "Category", Type: "text", Placeholder: "bragi",
 		Help: "Bragi files its downloads under this category so it never touches yours."}
 )
 
@@ -148,6 +150,9 @@ var kinds = []Kind{
 		Fields: []Field{{Name: "baseUrl", Label: "API URL", Type: "url", Placeholder: "http://192.168.1.10:9117/api/v2.0/indexers/x/results/torznab/api", Required: true}, fieldAPIKey}},
 	{ID: "nzbget", Label: "NZBGet", Role: RoleDownloader, Protocols: []Protocol{Usenet},
 		Fields: []Field{fieldBaseURL("http://192.168.1.10:6789"), fieldUsername, fieldPassword, fieldCategory}},
+	{ID: "sabnzbd", Label: "SABnzbd", Role: RoleDownloader, Protocols: []Protocol{Usenet},
+		Fields: []Field{fieldBaseURL("http://192.168.1.10:8080"), {Name: "apiKey", Label: "API key", Type: "password", Required: true,
+			Help: "In SABnzbd under Config, General, Security."}, fieldCategory}},
 	{ID: "qbittorrent", Label: "qBittorrent", Role: RoleDownloader, Protocols: []Protocol{Torrent},
 		Fields: []Field{fieldBaseURL("http://192.168.1.10:8080"), fieldUsername, fieldPassword, fieldCategory}},
 }
@@ -187,6 +192,8 @@ func NewDownloadClient(kind string, cfg Config, hc *http.Client) (DownloadClient
 	switch kind {
 	case "nzbget":
 		return &nzbget{cfg: cfg, hc: hc}, nil
+	case "sabnzbd":
+		return &sabnzbd{cfg: cfg, hc: hc}, nil
 	case "qbittorrent":
 		return &qbittorrent{cfg: cfg, hc: hc}, nil
 	}

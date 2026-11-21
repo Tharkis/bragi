@@ -13,6 +13,25 @@ export function episodeState(e) {
   return ['Wanted', 'warn']
 }
 
+// movieState returns [label, tone] for a movie.
+export function movieState(m) {
+  if (m.filePath || m.status === 'imported') return ['In library', 'good']
+  if (m.status === 'downloading' || m.downloading) return ['Downloading', 'accent']
+  if (m.status === 'searching') return ['Searching', 'accent']
+  if (!m.available || m.available > today()) return ['Not out yet', '']
+  if (!m.monitored) return ['Not monitored', '']
+  if (m.status === 'failed') return ['Failed', 'bad']
+  return ['Wanted', 'warn']
+}
+
+// releaseNote says when a movie comes out, for movies that are not out yet.
+export function releaseNote(m) {
+  const fmt = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+  if (m.available && m.available > today()) return `Bragi starts looking on ${fmt(m.available)}`
+  if (!m.available && !m.inCinemas) return 'No release date yet'
+  return ''
+}
+
 export const requestStates = {
   pending: ['Waiting for approval', 'warn'],
   approved: ['Approved', 'accent'],
@@ -30,7 +49,8 @@ export const downloadStates = {
   failed: ['Failed', 'bad'],
 }
 
-export function scopeLabel(seasons) {
+export function scopeLabel(seasons, type) {
+  if (type === 'movie') return 'Movie'
   if (seasons === 'all' || seasons === undefined) return 'All seasons'
   if (seasons === 'latest') return 'Latest season'
   if (seasons === 'future') return 'Future episodes'
