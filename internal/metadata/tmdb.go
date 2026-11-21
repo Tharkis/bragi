@@ -1,4 +1,4 @@
-// Package metadata looks up shows on TMDB.
+// Package metadata looks up shows and movies on TMDB.
 package metadata
 
 import (
@@ -106,7 +106,7 @@ func (t *TMDB) get(ctx context.Context, path string, q url.Values, out any) erro
 	case http.StatusUnauthorized:
 		return ErrBadKey
 	case http.StatusNotFound:
-		return fmt.Errorf("TMDB has no such show")
+		return fmt.Errorf("TMDB has no such title")
 	default:
 		return fmt.Errorf("TMDB answered HTTP %d", resp.StatusCode)
 	}

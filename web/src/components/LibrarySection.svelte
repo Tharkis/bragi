@@ -6,6 +6,11 @@
   let presets = $state([])
   let adding = $state(false)
   let draft = $state({ mediaType: 'tv', name: '', path: '/data/media/tv', qualityPresetId: null })
+  const defaultPaths = { tv: '/data/media/tv', movie: '/data/media/movies', music: '/data/media/music', book: '/data/media/books', audiobook: '/data/media/audiobooks' }
+  // Suggest the usual folder for the type until the path is edited.
+  function pickType(t) {
+    if (Object.values(defaultPaths).includes(draft.path)) draft.path = defaultPaths[t]
+  }
   let error = $state('')
 
   const types = { tv: 'TV', movie: 'Movies', music: 'Music', book: 'Books', audiobook: 'Audiobooks' }
@@ -59,10 +64,10 @@
   <form class="card" style="margin-bottom: 16px" onsubmit={add}>
     <label>
       <span>Media type</span>
-      <select bind:value={draft.mediaType}>
+      <select bind:value={draft.mediaType} onchange={(e) => pickType(e.currentTarget.value)}>
         {#each Object.entries(types) as [id, name] (id)}<option value={id}>{name}</option>{/each}
       </select>
-      <small>Only TV is managed in this version; other types are saved for later.</small>
+      <small>TV and Movies are managed in this version; other types are saved for later.</small>
     </label>
     <label><span>Folder</span><input bind:value={draft.path} required /></label>
     <label><span>Name (optional)</span><input bind:value={draft.name} placeholder="Taken from the folder name" /></label>

@@ -99,6 +99,17 @@ func Parse(name string) Info {
 		info.Title = name[:titleEnd]
 	} else if m := reRes.FindStringIndex(name); m != nil {
 		info.Title = name[:m[0]]
+		// A year before the resolution ends a movie title, e.g.
+		// "Past Lives (2023) [WEBRip-720p]".
+		if ys := reYear.FindAllStringIndex(info.Title, -1); len(ys) > 0 && ys[len(ys)-1][0] > 0 {
+			info.Title = info.Title[:ys[len(ys)-1][1]]
+		}
+	} else if m := reYear.FindAllStringIndex(name, -1); len(m) > 0 && m[len(m)-1][0] > 0 {
+		// A movie without a resolution, e.g. "Heat.1995.BluRay.x264": the
+		// title runs to the last year.
+		last := m[len(m)-1]
+		info.Title = name[:last[1]]
+		rest = name[last[1]:]
 	} else {
 		info.Title = name
 	}
@@ -196,4 +207,26 @@ func MatchesSeries(info Info, title string, year int) bool {
 	// "Show (2019)" as the series title, "Show" in the release, or the reverse.
 	withoutYear := Normalize(reYear.ReplaceAllString(title, ""))
 	return got == withoutYear || got+strconv.Itoa(year) == want
+}
+
+// MatchesMovie reports whether a parsed release is for the movie named
+// title, released in year. Release years are often a year off from TMDB's
+// (festival premieres, late releases elsewhere), so one year either way is
+// accepted. A title that ends in a number that looks like a year, such as
+// "Blade Runner 2049", is handled too.
+func MatchesMovie(info Info, title string, year int) bool {
+	want := Normalize(title)
+	got := Normalize(info.Title)
+	if got == "" {
+		return false
+	}
+	near := func(y int) bool { return y == 0 || year == 0 || y >= year-1 && y <= year+1 }
+	if got == want && near(info.Year) {
+		return true
+	}
+	if info.Year != 0 && got+strconv.Itoa(info.Year) == want {
+		return true
+	}
+	// "Movie (2019)" as the stored title.
+	return got == Normalize(reYear.ReplaceAllString(title, "")) && near(info.Year)
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/Tharkis/bragi/internal/db"
 	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/fakes"
+	"github.com/Tharkis/bragi/internal/movies"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
 )
@@ -24,9 +25,12 @@ import (
 type tvEnv struct {
 	*client
 	tv        *tv.Service
+	movies    *movies.Service
 	library   string
+	movieLib  string
 	downloads string
 	refreshes *atomic.Int32
+	sabURL    string
 }
 
 // newTVEnv starts Bragi with fake TMDB, Prowlarr, NZBGet, qBittorrent and
@@ -43,8 +47,10 @@ func newTVEnv(t *testing.T) *tvEnv {
 	}
 	root := t.TempDir()
 	library := filepath.Join(root, "media", "tv")
+	movieLib := filepath.Join(root, "media", "movies")
 	downloads := filepath.Join(root, "downloads")
 	os.MkdirAll(library, 0o755)
+	os.MkdirAll(movieLib, 0o755)
 	os.MkdirAll(downloads, 0o755)
 
 	tmdb := httptest.NewServer(fakes.TMDB())
@@ -58,6 +64,8 @@ func newTVEnv(t *testing.T) *tvEnv {
 	t.Cleanup(nzbget.Close)
 	qbit := httptest.NewServer(dl.QBittorrent())
 	t.Cleanup(qbit.Close)
+	sab := httptest.NewServer(dl.SABnzbd())
+	t.Cleanup(sab.Close)
 	refreshes := &atomic.Int32{}
 	jellyfin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != `MediaBrowser Token="jf-key"` {
@@ -79,7 +87,9 @@ func newTVEnv(t *testing.T) *tvEnv {
 	hc := &http.Client{Timeout: 5 * time.Second}
 	svc := tv.New(st, hc, nil, hub)
 	svc.TMDBBaseURL = tmdb.URL + "/3"
-	srv := httptest.NewServer(New(Options{Store: st, Version: "test", HTTPClient: hc, TV: svc, Events: hub}))
+	mv := movies.New(st, hc, nil, hub, svc.TMDB)
+	mv.RefreshJellyfin = svc.RefreshJellyfin
+	srv := httptest.NewServer(New(Options{Store: st, Version: "test", HTTPClient: hc, TV: svc, Movies: mv, Events: hub}))
 	t.Cleanup(srv.Close)
 	jar, _ := cookiejar.New(nil)
 	c := &client{t: t, url: srv.URL, hc: &http.Client{Jar: jar}}
@@ -96,7 +106,7 @@ func newTVEnv(t *testing.T) *tvEnv {
 	must(c.do("POST", "/api/v1/downloadclients", map[string]any{"kind": "nzbget", "baseUrl": nzbget.URL, "category": "tv", "enabled": true}, nil), 201, "nzbget")
 	must(c.do("POST", "/api/v1/downloadclients", map[string]any{"kind": "qbittorrent", "baseUrl": qbit.URL, "category": "tv", "enabled": true}, nil), 201, "qbittorrent")
 	must(c.do("PUT", "/api/v1/settings", map[string]string{"tmdb_api_key": "good", "jellyfin_url": jellyfin.URL + "/", "jellyfin_api_key": "jf-key"}, nil), 200, "settings")
-	return &tvEnv{client: c, tv: svc, library: library, downloads: downloads, refreshes: refreshes}
+	return &tvEnv{client: c, tv: svc, movies: mv, library: library, movieLib: movieLib, downloads: downloads, refreshes: refreshes, sabURL: sab.URL}
 }
 
 func listFiles(t *testing.T, root string) []string {

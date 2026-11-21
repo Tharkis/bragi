@@ -30,7 +30,7 @@
     load()
     // Progress is polled from the clients every 30 seconds; refetch then too.
     const t = setInterval(load, 15000)
-    const off = onEvents(['download', 'episodes'], load, 250)
+    const off = onEvents(['download', 'episodes', 'movie'], load, 250)
     return () => {
       clearInterval(t)
       off()
@@ -78,8 +78,10 @@
       <div class="body">
         <div class="spread">
           <div class="what">
-            <a href={`/library/${d.seriesId}`} onclick={link}><strong>{d.seriesTitle}</strong></a>
-            <span class="muted">{d.label}</span>
+            <a href={d.mediaType === 'movie' ? `/movies/${d.seriesId}` : `/library/${d.seriesId}`} onclick={link}
+              ><strong>{d.seriesTitle}</strong></a
+            >
+            <span class="muted">{d.mediaType === 'movie' ? 'Movie' : d.label}</span>
           </div>
           <Badge {label} {tone} />
         </div>

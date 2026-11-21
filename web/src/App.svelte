@@ -10,6 +10,7 @@
   import Discover from './pages/Discover.svelte'
   import Library from './pages/Library.svelte'
   import Series from './pages/Series.svelte'
+  import Movie from './pages/Movie.svelte'
   import Activity from './pages/Activity.svelte'
   import Requests from './pages/Requests.svelte'
 
@@ -60,8 +61,10 @@
   })
 
   const seriesId = $derived(route.path.match(/^\/library\/(\d+)$/)?.[1])
+  const movieId = $derived(route.path.match(/^\/movies\/(\d+)$/)?.[1])
 
-  const active = (path) => route.path === path || route.path.startsWith(path + '/')
+  const active = (path) =>
+    route.path === path || route.path.startsWith(path + '/') || (path === '/library' && route.path.startsWith('/movies/'))
 </script>
 
 {#if loading}
@@ -108,10 +111,12 @@
         <Settings {me} />
       {:else if route.path === '/discover'}
         <Discover {me} />
-      {:else if route.path === '/library'}
-        <Library {me} />
+      {:else if route.path === '/library' || route.path === '/library/movies'}
+        {#key route.path}<Library {me} kind={route.path === '/library/movies' ? 'movie' : 'tv'} />{/key}
       {:else if seriesId}
         {#key seriesId}<Series id={seriesId} {me} />{/key}
+      {:else if movieId}
+        {#key movieId}<Movie id={movieId} {me} />{/key}
       {:else if route.path === '/activity' || route.path === '/activity/history'}
         <Activity {me} tab={route.path === '/activity/history' ? 'history' : 'queue'} />
       {:else if route.path === '/requests'}
