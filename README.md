@@ -7,7 +7,7 @@ Bragi is one app for your media collection. Request a show, and Bragi finds it t
 | | Now | Later |
 | --- | --- | --- |
 | Indexers | Prowlarr, Jackett, any Newznab / Torznab URL | |
-| Download clients | NZBGet, SABnzbd, qBittorrent, slskd (Soulseek) | Transmission, Deluge |
+| Download clients | NZBGet, SABnzbd, qBittorrent, Transmission, Deluge, slskd (Soulseek) | |
 | Media | TV, movies, ebooks, audiobooks | Music |
 | Requests | Web UI, REST API, [Jellyfin plugin](jellyfin-plugin/README.md), Jellyseerr-compatible API | |
 
@@ -16,6 +16,9 @@ Bragi is one app for your media collection. Request a show, and Bragi finds it t
 - **Categories.** Set one category, or a different one per media type under *More options* (e.g. `tv`, `movies`, `books`, `audiobooks`). The Test button warns when NZBGet has no such category.
 - **Path mapping.** If the client runs in its own container and sees its downloads as `/downloads` while Bragi sees `/data/usenet`, enter both under *More options*. Mapping the same `/data` share into every container avoids this and lets Bragi hardlink.
 - **NZBGet** needs version 16 or newer and its control or restricted login; the add-only login cannot see the queue. Bragi treats damaged, password-protected or unpacking-failed downloads as failed, blocklists the release and grabs another.
+- **Transmission** (2.80 or newer) has no categories, so Bragi saves each download in a subfolder of Transmission's download folder named after the category (e.g. `/downloads/complete/movies`), and labels it on Transmission 4. Enter the URL as `http://host:9091`; Bragi adds `/transmission/rpc`. If Test says Transmission refused the address, add Bragi's IP to `rpc-whitelist`.
+- **Deluge** connects through its web UI (port 8112) with the web password. Categories become Deluge labels, created as needed; turn on the Label plugin, or Test will warn that downloads go unlabeled. If the web UI isn't connected to a daemon, Bragi connects it to the first one in its Connection Manager.
+- **Torrents that fail.** A real client error (a full disk, missing files) counts as a failed download: Bragi removes it, blocklists the release and grabs another. Tracker hiccups don't count.
 
 ## Run it
 
@@ -123,7 +126,7 @@ internal/tv/            the TV pipeline: add shows, search, grab, track, import,
 internal/scan/          library scans: queue, nightly scan, unmatched items; each pipeline adopts its own media
 internal/release/       release-name parsing and ranking against quality presets
 internal/metadata/      TMDB client
-internal/fakes/         fake TMDB, Prowlarr, NZBGet and qBittorrent for tests
+internal/fakes/         fake TMDB, Prowlarr and download clients for tests
 internal/store/         SQLite queries
 internal/db/            connection, migrations (migrations/*.sql), backups
 web/                    Svelte UI, built into web/dist and embedded in the binary

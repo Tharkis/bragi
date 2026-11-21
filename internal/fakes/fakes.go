@@ -1,6 +1,6 @@
 // Package fakes provides in-process stand-ins for TMDB, Prowlarr, NZBGet,
-// SABnzbd and qBittorrent. Tests use them to run the whole TV pipeline without a
-// network, and `go run ./internal/fakes/cmd` serves them for UI work.
+// SABnzbd, qBittorrent, Transmission and Deluge. Tests use them to run the
+// whole pipeline without a network, and `go run ./internal/fakes/cmd` serves them for UI work.
 package fakes
 
 import (
@@ -275,9 +275,12 @@ type job struct {
 	id       string
 	name     string
 	category string
-	started  time.Time
-	done     bool
-	removed  bool
+	// sub is the folder under Dir the files land in, for clients that
+	// file categories into subfolders.
+	sub     string
+	started time.Time
+	done    bool
+	removed bool
 	// polls counts NZBGet status calls after the download finished, so
 	// PostProcess can show one round of unpacking.
 	polls int
@@ -315,6 +318,13 @@ type Downloader struct {
 	NZBGetRoot       string
 	NZBGetResult     func(name string) string
 	NZBGetCategories []string
+	// Torrent options. TorrentRoot is where the fake Transmission and
+	// Deluge say Dir is. TorrentError fails a Transmission or Deluge job
+	// with the returned message once it is half done; "" means no error.
+	// DelugeNoLabel acts as if Deluge's Label plugin is off.
+	TorrentRoot   string
+	TorrentError  func(name string) string
+	DelugeNoLabel bool
 	// Seasons lists episode counts so a season pack gets one file per episode.
 	mu   sync.Mutex
 	jobs []*job
@@ -338,7 +348,7 @@ func (d *Downloader) progress(j *job) float64 {
 	p := float64(time.Since(j.started)) / float64(d.Duration)
 	if p >= 1 {
 		j.done = true
-		dir := filepath.Join(d.Dir, j.name)
+		dir := filepath.Join(d.Dir, j.sub, j.name)
 		os.MkdirAll(dir, 0o755)
 		if files := bookFiles(j.name); files != nil {
 			for name, body := range files {
