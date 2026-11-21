@@ -1,7 +1,7 @@
 # Copy to docker-compose.yml and adjust the paths.
 services:
   bragi:
-    image: ghcr.io/tharkis/bragi:latest
+    image: ghcr.io/tharkis/bragi:edge   # :latest arrives with the first v* release tag
     container_name: bragi
     restart: unless-stopped
     ports:

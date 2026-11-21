@@ -21,14 +21,23 @@ Bragi is one app for your media collection. Request a show, and Bragi finds it t
 
 ### Unraid
 
-Add the template from `unraid/bragi.xml` (Community Applications submission comes once the TV slice works). Map one `/data` share that holds both downloads and media, so imports are instant hardlinks instead of copies.
+Until Bragi is in Community Applications, add it by hand:
+
+1. On the Unraid terminal, fetch the template into your user templates:
+   `wget -O /boot/config/plugins/dockerMan/templates-user/my-bragi.xml https://raw.githubusercontent.com/Tharkis/bragi/main/unraid/bragi.xml`
+   (or copy `unraid/bragi.xml` there yourself).
+2. Docker tab, **Add Container**, pick **bragi** from the template list.
+3. Set **Data** to the share that holds both downloads and media (default `/mnt/user/data`), so imports are instant hardlinks instead of copies. Your download clients should see that same share at the same path (`/data`); if they don't, set a path mapping on the client in Bragi.
+4. Apply, then open the WebUI.
+
+The template uses the `:edge` image, built from every merge to `main`. A `:latest` tag appears with the first `v*` release. Logs go to the container's **Logs** icon; set **Log level** to `debug` (advanced view) when reporting a problem.
 
 ### Docker Compose
 
 ```yaml
 services:
   bragi:
-    image: ghcr.io/tharkis/bragi:latest
+    image: ghcr.io/tharkis/bragi:edge
     restart: unless-stopped
     ports: ["8787:8787"]
     environment: [PUID=1000, PGID=1000, TZ=Etc/UTC]
