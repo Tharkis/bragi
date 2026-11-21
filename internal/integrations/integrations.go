@@ -193,6 +193,21 @@ var kinds = []Kind{
 			Help: "In SABnzbd under Config, General, Security."}, fieldCategory}, downloadOptions("SABnzbd")...)},
 	{ID: "qbittorrent", Label: "qBittorrent", Role: RoleDownloader, Protocols: []Protocol{Torrent},
 		Fields: append([]Field{fieldBaseURL("http://192.168.1.10:8080"), fieldUsername, fieldPassword, fieldCategory}, downloadOptions("qBittorrent")...)},
+	{ID: "transmission", Label: "Transmission", Role: RoleDownloader, Protocols: []Protocol{Torrent},
+		Fields: append([]Field{
+			{Name: "baseUrl", Label: "URL", Type: "url", Placeholder: "http://192.168.1.10:9091", Required: true,
+				Help: "Bragi adds /transmission/rpc unless the URL already ends in /rpc."},
+			fieldUsername, fieldPassword,
+			{Name: "category", Label: "Category", Type: "text", Placeholder: "bragi",
+				Help: "Transmission has no categories, so Bragi saves downloads in a subfolder with this name, and labels them on Transmission 4."}},
+			downloadOptions("Transmission")...)},
+	{ID: "deluge", Label: "Deluge", Role: RoleDownloader, Protocols: []Protocol{Torrent},
+		Fields: append([]Field{fieldBaseURL("http://192.168.1.10:8112"),
+			{Name: "password", Label: "Password", Type: "password", Required: true,
+				Help: "The web UI password. Deluge's default is “deluge”."},
+			{Name: "category", Label: "Category", Type: "text", Placeholder: "bragi",
+				Help: "Bragi labels its downloads with this, using Deluge's Label plugin."}},
+			downloadOptions("Deluge")...)},
 	{ID: "slskd", Label: "slskd (Soulseek)", Role: RoleDownloader, Protocols: []Protocol{Soulseek},
 		Fields: []Field{fieldBaseURL("http://192.168.1.10:5030"),
 			{Name: "apiKey", Label: "API key", Type: "password", Required: true,
@@ -249,6 +264,10 @@ func newDownloadClient(kind string, cfg Config, hc *http.Client) (DownloadClient
 		return &sabnzbd{cfg: cfg, hc: hc}, nil
 	case "qbittorrent":
 		return &qbittorrent{cfg: cfg, hc: hc}, nil
+	case "transmission":
+		return &transmission{cfg: cfg, hc: hc}, nil
+	case "deluge":
+		return &deluge{cfg: cfg, hc: hc}, nil
 	case "slskd":
 		return &slskd{cfg: cfg, hc: hc}, nil
 	}
