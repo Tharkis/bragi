@@ -31,7 +31,7 @@ type Series struct {
 	CreatedAt  string `json:"createdAt"`
 
 	// Episode counts, filled by ListSeries and GetSeries.
-	Episodes   int `json:"episodes"`   // monitored episodes that have aired
+	Episodes   int `json:"episodes"`   // episodes that are wanted (monitored and aired) or on disk
 	Imported   int `json:"imported"`   // episodes with a file
 	Missing    int `json:"missing"`    // monitored, aired, no file
 	Activities int `json:"activities"` // downloads in progress
@@ -68,7 +68,7 @@ func Today() string { return time.Now().UTC().Format("2006-01-02") }
 const seriesCols = `w.id, COALESCE(w.tmdb_id, 0), COALESCE(w.tvdb_id, 0), COALESCE(w.imdb_id, ''), w.title, COALESCE(w.year, 0),
 	w.overview, w.poster_path, w.runtime, COALESCE(w.library_id, 0), w.folder, w.monitored, w.created_at,
 	(SELECT COUNT(*) FROM media_items e JOIN media_items s ON s.id = e.parent_id
-	   WHERE s.parent_id = w.id AND e.monitored = 1 AND e.air_date IS NOT NULL AND e.air_date <= ?),
+	   WHERE s.parent_id = w.id AND (e.status = 'imported' OR e.monitored = 1 AND e.air_date IS NOT NULL AND e.air_date <= ?)),
 	(SELECT COUNT(*) FROM media_items e JOIN media_items s ON s.id = e.parent_id
 	   WHERE s.parent_id = w.id AND e.status = 'imported'),
 	(SELECT COUNT(*) FROM media_items e JOIN media_items s ON s.id = e.parent_id

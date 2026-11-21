@@ -4,6 +4,7 @@
   import { route, navigate, link } from '../lib/router.svelte.js'
   import IntegrationSection from '../components/IntegrationSection.svelte'
   import LibrarySection from '../components/LibrarySection.svelte'
+  import ConnectionsSection from '../components/ConnectionsSection.svelte'
 
   let { me } = $props()
 
@@ -12,6 +13,7 @@
     { path: '/settings/downloadclients', label: 'Download clients' },
     { path: '/settings/libraries', label: 'Libraries' },
     { path: '/settings/quality', label: 'Quality' },
+    { path: '/settings/connections', label: 'Connections' },
     { path: '/settings/account', label: 'Account' },
   ]
 
@@ -75,6 +77,8 @@
       </div>
     {/each}
   </div>
+{:else if route.path === '/settings/connections'}
+  <ConnectionsSection />
 {:else if route.path === '/settings/account'}
   <h2>Account</h2>
   <div class="card stack">
