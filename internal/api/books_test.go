@@ -134,6 +134,7 @@ func TestBookRequestToImport(t *testing.T) {
 		t.Fatalf("queue after first pass: %+v", queue)
 	}
 
+	time.Sleep(5 * time.Millisecond)
 	e.books.Pass(ctx)
 	files := listFiles(t, e.ebooks)
 	want := filepath.Join("Andy Weir", "Project Hail Mary (2021)", "Project Hail Mary - Andy Weir.epub")
@@ -197,7 +198,8 @@ func TestAudiobookTorrentHardlinksTracks(t *testing.T) {
 	if code := e.do("POST", fmt.Sprintf("/api/v1/books/%d/grab", id), map[string]any{"release": mp3.Release}, nil); code != 200 {
 		t.Fatalf("grab: %d", code)
 	}
-	e.books.Pass(ctx) // poll: done, import
+	time.Sleep(5 * time.Millisecond) // the fake torrent finishes after 1 ms
+	e.books.Pass(ctx)                // poll: done, import
 	files := listFiles(t, e.audio)
 	if len(files) != 6 || files[0] != filepath.Join("Susanna Clarke", "Piranesi (2020)", "CD1 - 01 - Chapter 1.mp3") {
 		t.Fatalf("audiobook files: %v", files)
