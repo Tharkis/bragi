@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>bragi</Name>
+  <Repository>ghcr.io/tharkis/bragi:latest</Repository>
+  <Registry>https://github.com/Tharkis/bragi/pkgs/container/bragi</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Tharkis/bragi/issues</Support>
+  <Project>https://github.com/Tharkis/bragi</Project>
+  <Overview>Bragi is one app for your media collection: request a show, and Bragi finds it through Prowlarr or Jackett, sends it to NZBGet or qBittorrent, and files it into your library. TV first; movies, music, books and audiobooks to follow.[br][br]Map your downloads and media under one /data share so Bragi can hardlink instead of copying.</Overview>
+  <Category>Downloaders: MediaApp:Video</Category>
+  <WebUI>http://[IP]:[PORT:8787]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Tharkis/bragi/main/unraid/bragi.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Tharkis/bragi/main/unraid/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <Requires/>
+  <Config Name="WebUI port" Target="8787" Default="8787" Mode="tcp" Description="Port for the web UI and API." Type="Port" Display="always" Required="true" Mask="false">8787</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/data" Mode="rw" Description="One share holding both downloads and media (e.g. /data/torrents, /data/usenet, /data/media/tv), so imports are instant hardlinks." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/bragi" Mode="rw" Description="Database, logs and backups." Type="Path" Display="advanced" Required="true" Mask="false">/mnt/user/appdata/bragi</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID Bragi runs as." Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID Bragi runs as." Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>
+  <Config Name="UMASK" Target="UMASK" Default="002" Mode="" Description="File permission mask for new files." Type="Variable" Display="advanced" Required="false" Mask="false">002</Config>
+  <Config Name="TZ" Target="TZ" Default="Etc/UTC" Mode="" Description="Time zone, e.g. America/New_York." Type="Variable" Display="advanced" Required="false" Mask="false">Etc/UTC</Config>
+</Container>
