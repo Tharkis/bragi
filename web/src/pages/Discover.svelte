@@ -5,8 +5,10 @@
   import Modal from '../components/Modal.svelte'
   import Badge from '../components/Badge.svelte'
   import { requestStates } from '../lib/status.js'
+  import BookDiscover from '../components/BookDiscover.svelte'
+  import MediaTabs from '../components/MediaTabs.svelte'
 
-  let { me } = $props()
+  let { me, type = 'tv' } = $props()
 
   let query = $state('')
   let results = $state(null)
@@ -94,10 +96,15 @@
 <div class="page-head">
   <div>
     <h1>Discover</h1>
-    <p class="muted">Find a show and request it. Bragi does the rest.</p>
+    <p class="muted">Find something to watch, read or listen to and request it. Bragi does the rest.</p>
   </div>
 </div>
 
+<MediaTabs base="/discover" {type} />
+
+{#if type !== 'tv'}
+  {#key type}<BookDiscover {me} {type} />{/key}
+{:else}
 <form class="search" onsubmit={search}>
   <input
     type="search"
@@ -144,6 +151,8 @@
       {me.role === 'admin' ? 'Your requests are added straight away.' : 'An admin approves requests before Bragi downloads anything.'}
     </p>
   </div>
+{/if}
+
 {/if}
 
 {#if picking}

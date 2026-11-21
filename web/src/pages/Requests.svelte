@@ -3,7 +3,7 @@
   import { get, post, del } from '../lib/api.js'
   import { link } from '../lib/router.svelte.js'
   import { onEvents } from '../lib/events.js'
-  import { requestStates, scopeLabel, when } from '../lib/status.js'
+  import { requestStates, scopeLabel, when, isBook, bookTypes, itemPath } from '../lib/status.js'
   import Poster from '../components/Poster.svelte'
   import Badge from '../components/Badge.svelte'
 
@@ -29,7 +29,7 @@
 
   onMount(() => {
     load()
-    return onEvents(['request', 'download', 'episodes'], load)
+    return onEvents(['request', 'download', 'episodes', 'book'], load)
   })
 
   const pending = $derived(requests.filter((r) => r.status === 'pending'))
@@ -85,7 +85,7 @@
       <p>Nothing is waiting for approval.</p>
     {:else}
       <p>No requests yet.</p>
-      <a href="/discover" onclick={link}>Find a show to request</a>
+      <a href="/discover" onclick={link}>Find something to request</a>
     {/if}
   </div>
 {/if}
@@ -99,11 +99,13 @@
         <div class="spread">
           <div>
             <div class="title">
-              {#if r.progress}<a href={`/library/${r.progress.seriesId}`} onclick={link}>{r.title}</a>{:else}{r.title}{/if}
+              {#if r.progress}<a href={itemPath(r.type, r.progress.seriesId)} onclick={link}>{r.title}</a>{:else}{r.title}{/if}
               {#if r.year}<span class="muted">({r.year})</span>{/if}
             </div>
             <div class="muted small">
-              {scopeLabel(r.seasons)} · {admin ? `${r.username}, ` : ''}{when(r.createdAt)}
+              {isBook(r.type) ? `${bookTypes[r.type]}${r.author ? ' by ' + r.author : ''}` : scopeLabel(r.seasons)} · {admin
+                ? `${r.username}, `
+                : ''}{when(r.createdAt)}
             </div>
           </div>
           <Badge {label} {tone} />
@@ -115,8 +117,12 @@
           <div class="progress">
             <div class="bar" class:good={r.status === 'available'}><div style="width: {pct(r.progress)}%"></div></div>
             <div class="muted small">
-              {r.progress.imported} of {r.progress.episodes} episodes
-              {#if r.progress.downloading}· {r.progress.downloading} downloading{/if}
+              {#if isBook(r.type)}
+                {r.progress.imported ? 'In your library' : r.progress.downloading ? 'Downloading' : 'Searching for it'}
+              {:else}
+                {r.progress.imported} of {r.progress.episodes} episodes
+                {#if r.progress.downloading}· {r.progress.downloading} downloading{/if}
+              {/if}
             </div>
           </div>
         {/if}

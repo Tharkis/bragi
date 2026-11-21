@@ -9,6 +9,13 @@
   let error = $state('')
 
   const types = { tv: 'TV', movie: 'Movies', music: 'Music', book: 'Books', audiobook: 'Audiobooks' }
+  const defaultPaths = { tv: '/data/media/tv', movie: '/data/media/movies', music: '/data/media/music', book: '/data/media/books', audiobook: '/data/media/audiobooks' }
+  // Quality presets are about video; books rank by file format instead.
+  const usesPreset = (t) => t === 'tv' || t === 'movie'
+
+  function typeChanged() {
+    if (Object.values(defaultPaths).includes(draft.path)) draft.path = defaultPaths[draft.mediaType]
+  }
 
   async function load() {
     try {
@@ -26,7 +33,7 @@
     event.preventDefault()
     error = ''
     try {
-      await post('/libraries', draft)
+      await post('/libraries', { ...draft, qualityPresetId: usesPreset(draft.mediaType) ? draft.qualityPresetId : null })
       adding = false
       await load()
     } catch (e) {
@@ -59,19 +66,25 @@
   <form class="card" style="margin-bottom: 16px" onsubmit={add}>
     <label>
       <span>Media type</span>
-      <select bind:value={draft.mediaType}>
+      <select bind:value={draft.mediaType} onchange={typeChanged}>
         {#each Object.entries(types) as [id, name] (id)}<option value={id}>{name}</option>{/each}
       </select>
-      <small>Only TV is managed in this version; other types are saved for later.</small>
+      <small>TV, Books and Audiobooks are managed in this version; other types are saved for later.</small>
     </label>
     <label><span>Folder</span><input bind:value={draft.path} required /></label>
     <label><span>Name (optional)</span><input bind:value={draft.name} placeholder="Taken from the folder name" /></label>
-    <label>
-      <span>Quality preset</span>
-      <select bind:value={draft.qualityPresetId}>
-        {#each presets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-      </select>
-    </label>
+    {#if usesPreset(draft.mediaType)}
+      <label>
+        <span>Quality preset</span>
+        <select bind:value={draft.qualityPresetId}>
+          {#each presets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+        </select>
+      </label>
+    {:else}
+      <p class="small muted">
+        {draft.mediaType === 'audiobook' ? 'Bragi prefers M4B, then MP3.' : draft.mediaType === 'book' ? 'Bragi prefers EPUB, then AZW3, MOBI and PDF.' : ''}
+      </p>
+    {/if}
     <div class="row">
       <button class="primary">Add library</button>
       <button type="button" class="link" onclick={() => (adding = false)}>Cancel</button>
@@ -88,7 +101,7 @@
           <tr>
             <td><div>{lib.name}</div><div class="muted small">{lib.path}</div></td>
             <td>{types[lib.mediaType]}</td>
-            <td>{presetName(lib.qualityPresetId)}</td>
+            <td>{usesPreset(lib.mediaType) ? presetName(lib.qualityPresetId) : lib.mediaType === 'audiobook' ? 'M4B first' : lib.mediaType === 'book' ? 'EPUB first' : '—'}</td>
             <td class="actions"><button class="danger" onclick={() => remove(lib)}>Remove</button></td>
           </tr>
         {/each}

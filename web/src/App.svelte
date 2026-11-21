@@ -12,6 +12,7 @@
   import Series from './pages/Series.svelte'
   import Activity from './pages/Activity.svelte'
   import Requests from './pages/Requests.svelte'
+  import Book from './pages/Book.svelte'
 
   let status = $state(null)
   let me = $state(null)
@@ -60,8 +61,14 @@
   })
 
   const seriesId = $derived(route.path.match(/^\/library\/(\d+)$/)?.[1])
+  const bookId = $derived(route.path.match(/^\/books\/(\d+)$/)?.[1])
+  // /discover/books, /library/audiobooks, ... pick the media type.
+  const typeOf = (rest) => ({ '': 'tv', '/books': 'book', '/audiobooks': 'audiobook' })[rest]
+  const discoverType = $derived(typeOf(route.path.replace(/^\/discover/, '')))
+  const libraryType = $derived(typeOf(route.path.replace(/^\/library/, '')))
 
-  const active = (path) => route.path === path || route.path.startsWith(path + '/')
+  const active = (path) =>
+    route.path === path || route.path.startsWith(path + '/') || (path === '/library' && route.path.startsWith('/books/'))
 </script>
 
 {#if loading}
@@ -106,12 +113,14 @@
     <main>
       {#if active('/settings') && me.role === 'admin'}
         <Settings {me} />
-      {:else if route.path === '/discover'}
-        <Discover {me} />
-      {:else if route.path === '/library'}
-        <Library {me} />
+      {:else if route.path.startsWith('/discover') && discoverType}
+        <Discover {me} type={discoverType} />
+      {:else if route.path.startsWith('/library') && libraryType}
+        <Library {me} type={libraryType} />
       {:else if seriesId}
         {#key seriesId}<Series id={seriesId} {me} />{/key}
+      {:else if bookId}
+        {#key bookId}<Book id={bookId} {me} />{/key}
       {:else if route.path === '/activity' || route.path === '/activity/history'}
         <Activity {me} tab={route.path === '/activity/history' ? 'history' : 'queue'} />
       {:else if route.path === '/requests'}

@@ -4,8 +4,10 @@
   import { link } from '../lib/router.svelte.js'
   import { onEvents } from '../lib/events.js'
   import Poster from '../components/Poster.svelte'
+  import BookLibrary from '../components/BookLibrary.svelte'
+  import MediaTabs from '../components/MediaTabs.svelte'
 
-  let { me } = $props()
+  let { me, type = 'tv' } = $props()
   const admin = me.role === 'admin'
 
   let shows = $state([])
@@ -52,6 +54,9 @@
   }
 </script>
 
+{#if type !== 'tv'}
+  {#key type}<BookLibrary {me} {type} />{/key}
+{:else}
 <div class="page-head">
   <div>
     <h1>Library</h1>
@@ -64,6 +69,8 @@
     {/if}
   </div>
 </div>
+
+<MediaTabs base="/library" {type} />
 
 {#if error}<div class="notice bad">{error}</div>{/if}
 
@@ -107,6 +114,8 @@
     </a>
   {/each}
 </div>
+
+{/if}
 
 <style>
   .filter {
