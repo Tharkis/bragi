@@ -2,14 +2,20 @@
 
 Bragi is one app for your media collection. Request a show, and Bragi finds it through your indexers, sends it to your download client, and files it into your library. It replaces a stack of *arr apps with one container, one database and one settings page.
 
-**Status:** early. TV works end to end: request a show, Bragi searches your indexers, sends the best release to NZBGet or qBittorrent, then renames it into your TV folder and tells Jellyfin. Movies, music, books and audiobooks come later.
+**Status:** early. TV, movies, ebooks and audiobooks work end to end: request something, Bragi searches your indexers, sends the best release to your download client, then renames it into your library and tells Jellyfin. Music comes later.
 
-| | v1 (TV) | Later |
+| | Now | Later |
 | --- | --- | --- |
 | Indexers | Prowlarr, Jackett, any Newznab / Torznab URL | |
-| Download clients | NZBGet, qBittorrent | SABnzbd, Transmission, Deluge, slskd (Soulseek) |
-| Media | TV | Movies, music, books, audiobooks |
+| Download clients | NZBGet, SABnzbd, qBittorrent, slskd (Soulseek) | Transmission, Deluge |
+| Media | TV, movies, ebooks, audiobooks | Music |
 | Requests | Web UI, REST API, [Jellyfin plugin](jellyfin-plugin/README.md), Jellyseerr-compatible API | |
+
+### Download client tips
+
+- **Categories.** Set one category, or a different one per media type under *More options* (e.g. `tv`, `movies`, `books`, `audiobooks`). The Test button warns when NZBGet has no such category.
+- **Path mapping.** If the client runs in its own container and sees its downloads as `/downloads` while Bragi sees `/data/usenet`, enter both under *More options*. Mapping the same `/data` share into every container avoids this and lets Bragi hardlink.
+- **NZBGet** needs version 16 or newer and its control or restricted login; the add-only login cannot see the queue. Bragi treats damaged, password-protected or unpacking-failed downloads as failed, blocklists the release and grabs another.
 
 ## Run it
 

@@ -97,6 +97,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .notice { border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; margin-bottom: 12px; }
 .notice.good { background: var(--good-soft); color: var(--good); }
 .notice.bad { background: var(--bad-soft); color: var(--bad); }
+.notice.warn { background: var(--warn-soft); color: var(--warn); }
 
 .badge {
   display: inline-block;

@@ -72,7 +72,7 @@
 
 <div class="stack">
   {#each items as d (d.id)}
-    {@const [label, tone] = downloadStates[d.status] ?? [d.status, '']}
+    {@const [label, tone] = d.stage && d.status === 'downloading' ? [d.stage, 'accent'] : (downloadStates[d.status] ?? [d.status, ''])}
     <div class="card dl">
       <Poster url={d.posterUrl} title={d.seriesTitle} size="sm" />
       <div class="body">
@@ -89,7 +89,12 @@
         {#if tab === 'queue'}
           <div class="bar"><div style="width: {Math.round(d.progress * 100)}%"></div></div>
           <div class="spread small muted">
-            <span>{Math.round(d.progress * 100)}% of {d.size} · {d.quality} · {d.clientName}</span>
+            <span
+              >{#if d.stage && d.progress >= 1}Downloaded {d.size}, {d.stage.toLowerCase()} in {d.clientName}{:else}{Math.round(
+                  d.progress * 100,
+                )}% of {d.size}{#if d.stage}
+                  · {d.stage}{/if} · {d.clientName}{/if} · {d.quality}</span
+            >
             {#if admin}<button class="link small" onclick={() => remove(d)}>Remove</button>{/if}
           </div>
           {#if d.error}<div class="small warn-text">{d.error}</div>{/if}

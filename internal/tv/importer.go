@@ -58,8 +58,8 @@ func (s *Service) PollDownloads(ctx context.Context) error {
 func (s *Service) track(ctx context.Context, d store.Download, j integrations.Job, client integrations.DownloadClient) {
 	switch j.State {
 	case integrations.JobQueued, integrations.JobDownloading:
-		if d.Status != j.State || d.Progress != j.Progress {
-			s.Store.UpdateDownload(ctx, d.ID, j.State, j.Progress, j.OutputPath, "")
+		if d.Status != j.State || d.Progress != j.Progress || d.Stage != j.Stage {
+			s.Store.UpdateDownload(ctx, d.ID, j.State, j.Progress, j.OutputPath, j.Stage)
 			s.publish("download", map[string]any{"id": d.ID, "seriesId": d.SeriesID, "progress": j.Progress})
 		}
 	case integrations.JobFailed:

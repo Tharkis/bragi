@@ -314,8 +314,15 @@ func (s *Service) presetFor(ctx context.Context, libraryID int64) (release.Prese
 	return release.Preset{Qualities: pick.Qualities, MaxMBPerMin: pick.MaxMBPerMin}, nil
 }
 
-func configOf(i store.Integration) integrations.Config {
-	return integrations.Config{BaseURL: i.BaseURL, APIKey: i.APIKey, Username: i.Username, Password: i.Password, Category: i.Category}
+// configOf builds an adapter's settings. mediaType picks the category a new
+// download goes under; it is empty when nothing is being added.
+func configOf(i store.Integration, mediaType ...string) integrations.Config {
+	cat := i.Category
+	if len(mediaType) > 0 {
+		cat = i.CategoryFor(mediaType[0])
+	}
+	return integrations.Config{BaseURL: i.BaseURL, APIKey: i.APIKey, Username: i.Username, Password: i.Password, Category: cat,
+		RemotePath: i.RemotePath, LocalPath: i.LocalPath}
 }
 
 var errNoClient = errors.New("no download client is set up for this kind of release")
@@ -335,7 +342,7 @@ func (s *Service) Grab(ctx context.Context, t Target, c release.Candidate) error
 		if !ok || !containsProtocol(kind.Protocols, c.Protocol) {
 			continue
 		}
-		a, err := integrations.NewDownloadClient(dc.Kind, configOf(dc), s.HC)
+		a, err := integrations.NewDownloadClient(dc.Kind, configOf(dc, "tv"), s.HC)
 		if err != nil {
 			return err
 		}

@@ -31,6 +31,7 @@ type tvEnv struct {
 	downloads string
 	refreshes *atomic.Int32
 	sabURL    string
+	dl        *fakes.Downloader
 }
 
 // newTVEnv starts Bragi with fake TMDB, Prowlarr, NZBGet, qBittorrent and
@@ -106,7 +107,7 @@ func newTVEnv(t *testing.T) *tvEnv {
 	must(c.do("POST", "/api/v1/downloadclients", map[string]any{"kind": "nzbget", "baseUrl": nzbget.URL, "category": "tv", "enabled": true}, nil), 201, "nzbget")
 	must(c.do("POST", "/api/v1/downloadclients", map[string]any{"kind": "qbittorrent", "baseUrl": qbit.URL, "category": "tv", "enabled": true}, nil), 201, "qbittorrent")
 	must(c.do("PUT", "/api/v1/settings", map[string]string{"tmdb_api_key": "good", "jellyfin_url": jellyfin.URL + "/", "jellyfin_api_key": "jf-key"}, nil), 200, "settings")
-	return &tvEnv{client: c, tv: svc, movies: mv, library: library, movieLib: movieLib, downloads: downloads, refreshes: refreshes, sabURL: sab.URL}
+	return &tvEnv{client: c, tv: svc, movies: mv, library: library, movieLib: movieLib, downloads: downloads, refreshes: refreshes, sabURL: sab.URL, dl: dl}
 }
 
 func listFiles(t *testing.T, root string) []string {

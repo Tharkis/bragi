@@ -492,8 +492,11 @@ type Download struct {
 	Progress         float64 `json:"progress"`
 	OutputPath       string  `json:"outputPath,omitempty"`
 	Error            string  `json:"error,omitempty"`
-	CreatedAt        string  `json:"createdAt"`
-	UpdatedAt        string  `json:"updatedAt"`
+	// Stage is what the client is doing with an active download beyond
+	// fetching it, e.g. "Unpacking". It shares the error column.
+	Stage     string `json:"stage,omitempty"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
 
 	// Filled for display: the show and what the download covers.
 	SeriesID    int64  `json:"seriesId"`
@@ -527,6 +530,9 @@ func scanDownload(row interface{ Scan(...any) error }) (*Download, error) {
 		&d.SizeBytes, &d.Quality, &d.Status, &d.Progress, &d.OutputPath, &d.Error, &d.CreatedAt, &d.UpdatedAt,
 		&level, &num, &parentNum, &d.SeriesID, &d.SeriesTitle, &d.PosterPath, &d.ClientName, &d.MediaType); err != nil {
 		return nil, mapErr(err)
+	}
+	if d.Status == "queued" || d.Status == "downloading" {
+		d.Stage, d.Error = d.Error, ""
 	}
 	switch level {
 	case "work":

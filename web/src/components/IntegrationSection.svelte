@@ -92,6 +92,7 @@
                 <div class="muted small">Testing…</div>
               {:else if results[item.id]?.ok}
                 <div class="small" style="color: var(--good)">Connected</div>
+                {#each results[item.id].warnings ?? [] as w}<div class="small" style="color: var(--warn)">{w}</div>{/each}
               {:else if results[item.id]}
                 <div class="small" style="color: var(--bad)">{results[item.id].error}</div>
               {/if}
