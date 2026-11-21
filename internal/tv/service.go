@@ -52,8 +52,6 @@ type Service struct {
 	TMDBBaseURL string
 
 	kick     chan struct{}
-	scanMu   sync.Mutex
-	scan     ScanStatus
 	importMu sync.Mutex
 }
 

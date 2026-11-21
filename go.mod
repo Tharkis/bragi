@@ -3,6 +3,7 @@ module github.com/Tharkis/bragi
 go 1.26.0
 
 require (
+	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	golang.org/x/crypto v0.59.0
 	modernc.org/sqlite v1.62.0
 )

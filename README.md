@@ -72,6 +72,15 @@ Downloads and the library must be visible to Bragi at the same paths the downloa
 
 Bragi snapshots its database to `/config/backups` once a day and keeps seven.
 
+## Importing what you already have
+
+Each Library tab has a scan button (**Scan TV folder**, **Scan movie folder**, **Scan books folder**, **Scan audiobooks folder**), and Settings, Libraries has **Scan all libraries**. A scan adds what is already on disk as owned, so Bragi never downloads it again. Nothing is moved, renamed or downloaded.
+
+- **TV and movies:** each `Title (Year)` folder is matched on TMDB.
+- **Ebooks and audiobooks:** any layout works, including Grimmory and Booklore naming patterns (`Author/Series/01. Title.epub`), Calibre (`Author/Title (123)/…`) and Audiobookshelf (`Author/Title/…`). Bragi reads the title and author from the file itself (EPUB metadata, audio tags) or from the path, and checks it against Open Library. Multi-part audiobooks, including `CD1`/`Disc 2` folders, count as one book. An ebook and an audiobook library may point at the same folder.
+
+Anything a scan cannot recognise is listed on its Library tab with **Find match** (search and pick the right title) and **Ignore**. Every library is also rescanned each night at 3 AM in the container's `TZ`, which picks up new files and skips what was already unrecognised; turn that off under Settings, Libraries.
+
 ## API
 
 Everything the UI does goes through the REST API under `/api/v1`. Scripts authenticate with the `X-Api-Key` header; find your key under Settings, Account.
@@ -111,6 +120,7 @@ cmd/bragi/              entry point
 internal/api/           HTTP handlers, auth, embedded UI serving
 internal/integrations/  indexer and download-client adapters (one file each)
 internal/tv/            the TV pipeline: add shows, search, grab, track, import, adopt a folder
+internal/scan/          library scans: queue, nightly scan, unmatched items; each pipeline adopts its own media
 internal/release/       release-name parsing and ranking against quality presets
 internal/metadata/      TMDB client
 internal/fakes/         fake TMDB, Prowlarr, NZBGet and qBittorrent for tests

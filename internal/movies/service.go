@@ -47,8 +47,6 @@ type Service struct {
 	RefreshJellyfin func(ctx context.Context) error
 
 	kick     chan struct{}
-	scanMu   sync.Mutex
-	scan     ScanStatus
 	importMu sync.Mutex
 }
 

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+	_ "time/tzdata" // so TZ works in the slim image
 
 	"github.com/Tharkis/bragi/internal/api"
 	"github.com/Tharkis/bragi/internal/books"
@@ -85,11 +86,15 @@ func run() error {
 	bookPipeline := books.New(st, hc, log, hub)
 	bookPipeline.OnImported = pipeline.RefreshJellyfin
 	go bookPipeline.Run(ctx)
+	scans := api.NewScanManager(st, log, hub, pipeline, moviePipeline, bookPipeline)
+	scans.Nightly = true
+	scans.Pace = 300 * time.Millisecond // be gentle with TMDB and Open Library
+	go scans.Run(ctx)
 
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
 		Handler: api.New(api.Options{Store: st, Logger: log, Version: version, UI: ui,
-			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Movies: moviePipeline, Books: bookPipeline, Events: hub}),
+			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Movies: moviePipeline, Books: bookPipeline, Events: hub, Scans: scans}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

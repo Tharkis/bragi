@@ -54,7 +54,7 @@
     busy = true
     try {
       await put('/settings', { setup_complete: 'true' })
-      if (scanExisting && added.tmdb) await post('/libraries/scan').catch(() => {})
+      if (scanExisting && added.tmdb) await post('/libraries/scan/all').catch(() => {})
       onDone()
     } catch (e) {
       error = e.message

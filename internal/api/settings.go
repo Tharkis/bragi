@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Tharkis/bragi/internal/integrations"
+	"github.com/Tharkis/bragi/internal/scan"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
 )
@@ -20,6 +21,7 @@ var editableSettings = map[string]bool{
 	tv.SettingTMDBKey:        true,
 	tv.SettingJellyfinURL:    true,
 	tv.SettingJellyfinAPIKey: true,
+	scan.SettingNightly:      true,
 }
 
 // secretSettings are masked in GET /settings; sending the mask back keeps them.
