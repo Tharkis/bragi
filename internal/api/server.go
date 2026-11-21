@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/store"
+	"github.com/Tharkis/bragi/internal/tv"
 )
 
 // Server holds the API's dependencies.
@@ -23,6 +25,8 @@ type Server struct {
 	hc      *http.Client
 	ui      fs.FS
 	mux     *http.ServeMux
+	tv      *tv.Service
+	events  *events.Hub
 }
 
 // Options configures a Server.
@@ -34,6 +38,10 @@ type Options struct {
 	UI fs.FS
 	// HTTPClient is used for outbound calls to indexers and clients.
 	HTTPClient *http.Client
+	// TV runs the TV pipeline. Nil builds one that is not scheduled, for tests.
+	TV *tv.Service
+	// Events carries live status changes to /api/v1/events.
+	Events *events.Hub
 }
 
 // New returns the HTTP handler for the whole app.
@@ -44,7 +52,14 @@ func New(o Options) http.Handler {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
 	}
-	s := &Server{store: o.Store, log: o.Logger, version: o.Version, hc: o.HTTPClient, ui: o.UI, mux: http.NewServeMux()}
+	if o.Events == nil {
+		o.Events = events.NewHub()
+	}
+	if o.TV == nil {
+		o.TV = tv.New(o.Store, o.HTTPClient, o.Logger, o.Events)
+	}
+	s := &Server{store: o.Store, log: o.Logger, version: o.Version, hc: o.HTTPClient, ui: o.UI, mux: http.NewServeMux(),
+		tv: o.TV, events: o.Events}
 	s.routes()
 	return s.withUser(s.logRequests(s.mux))
 }
@@ -88,6 +103,36 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/v1/libraries", s.requireAdmin(s.handleCreateLibrary))
 	m.HandleFunc("PUT /api/v1/libraries/{id}", s.requireAdmin(s.handleUpdateLibrary))
 	m.HandleFunc("DELETE /api/v1/libraries/{id}", s.requireAdmin(s.handleDeleteLibrary))
+
+	m.HandleFunc("POST /api/v1/settings/test/tmdb", s.requireAdmin(s.handleTestTMDB))
+	m.HandleFunc("POST /api/v1/settings/test/jellyfin", s.requireAdmin(s.handleTestJellyfin))
+	m.HandleFunc("POST /api/v1/libraries/scan", s.requireAdmin(s.handleStartScan))
+	m.HandleFunc("GET /api/v1/libraries/scan", s.requireAdmin(s.handleScanState))
+
+	// Discover and requests: the API the web UI, scripts and the Jellyfin
+	// plugin share.
+	m.HandleFunc("GET /api/v1/discover/search", s.requireUser(s.handleDiscoverSearch))
+	m.HandleFunc("GET /api/v1/discover/tv/{id}", s.requireUser(s.handleDiscoverShow))
+	m.HandleFunc("POST /api/v1/requests", s.requireUser(s.handleCreateRequest))
+	m.HandleFunc("GET /api/v1/requests", s.requireUser(s.handleListRequests))
+	m.HandleFunc("GET /api/v1/requests/{id}", s.requireUser(s.handleGetRequest))
+	m.HandleFunc("POST /api/v1/requests/{id}/approve", s.requireAdmin(s.handleApproveRequest))
+	m.HandleFunc("POST /api/v1/requests/{id}/deny", s.requireAdmin(s.handleDenyRequest))
+	m.HandleFunc("DELETE /api/v1/requests/{id}", s.requireUser(s.handleDeleteRequest))
+	m.HandleFunc("GET /api/v1/events", s.requireUser(s.handleEvents))
+
+	// Library and activity
+	m.HandleFunc("GET /api/v1/series", s.requireUser(s.handleListSeries))
+	m.HandleFunc("GET /api/v1/series/{id}", s.requireUser(s.handleGetSeries))
+	m.HandleFunc("DELETE /api/v1/series/{id}", s.requireAdmin(s.handleDeleteSeries))
+	m.HandleFunc("POST /api/v1/series/{id}/search", s.requireAdmin(s.handleSearchSeries))
+	m.HandleFunc("POST /api/v1/series/{id}/refresh", s.requireAdmin(s.handleRefreshSeries))
+	m.HandleFunc("PUT /api/v1/series/{id}/monitor", s.requireAdmin(s.handleMonitor))
+	m.HandleFunc("GET /api/v1/series/{id}/releases", s.requireAdmin(s.handleReleases))
+	m.HandleFunc("POST /api/v1/series/{id}/grab", s.requireAdmin(s.handleGrab))
+	m.HandleFunc("GET /api/v1/activity/queue", s.requireUser(s.handleQueue))
+	m.HandleFunc("GET /api/v1/activity/history", s.requireUser(s.handleHistory))
+	m.HandleFunc("DELETE /api/v1/activity/queue/{id}", s.requireAdmin(s.handleRemoveDownload))
 
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such endpoint")

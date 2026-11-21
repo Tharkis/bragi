@@ -15,11 +15,14 @@ type Config struct {
 	Port      int
 	ConfigDir string
 	LogLevel  slog.Level
+	// TMDBKey is used when no key is saved under Settings, Connections.
+	TMDBKey string
 }
 
-// FromEnv reads BRAGI_PORT, BRAGI_CONFIG_DIR and BRAGI_LOG_LEVEL.
+// FromEnv reads BRAGI_PORT, BRAGI_CONFIG_DIR, BRAGI_LOG_LEVEL and
+// BRAGI_TMDB_API_KEY.
 func FromEnv() (Config, error) {
-	cfg := Config{Port: 8787, ConfigDir: "./config", LogLevel: slog.LevelInfo}
+	cfg := Config{Port: 8787, ConfigDir: "./config", LogLevel: slog.LevelInfo, TMDBKey: strings.TrimSpace(os.Getenv("BRAGI_TMDB_API_KEY"))}
 
 	if v := os.Getenv("BRAGI_PORT"); v != "" {
 		p, err := strconv.Atoi(v)

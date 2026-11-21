@@ -9,13 +9,23 @@ import (
 
 	"github.com/Tharkis/bragi/internal/integrations"
 	"github.com/Tharkis/bragi/internal/store"
+	"github.com/Tharkis/bragi/internal/tv"
 )
 
 const settingSetupComplete = "setup_complete"
 
 // editableSettings are the keys PUT /settings accepts.
 var editableSettings = map[string]bool{
-	settingSetupComplete: true,
+	settingSetupComplete:     true,
+	tv.SettingTMDBKey:        true,
+	tv.SettingJellyfinURL:    true,
+	tv.SettingJellyfinAPIKey: true,
+}
+
+// secretSettings are masked in GET /settings; sending the mask back keeps them.
+var secretSettings = map[string]bool{
+	tv.SettingTMDBKey:        true,
+	tv.SettingJellyfinAPIKey: true,
 }
 
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
@@ -25,6 +35,9 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			s.storeError(w, err, "settings")
 			return
+		}
+		if secretSettings[k] && v != "" {
+			v = secretMask
 		}
 		out[k] = v
 	}
@@ -43,12 +56,68 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for k, v := range in {
+		if secretSettings[k] && v == secretMask {
+			continue
+		}
+		v = strings.TrimSpace(v)
+		if k == tv.SettingJellyfinURL {
+			v = strings.TrimRight(v, "/")
+		}
 		if err := s.store.SetSetting(r.Context(), k, v); err != nil {
 			s.storeError(w, err, "settings")
 			return
 		}
 	}
 	s.handleGetSettings(w, r)
+}
+
+// secretOrSaved returns v, or the saved setting when v is the mask.
+func (s *Server) secretOrSaved(r *http.Request, key, v string) string {
+	if v == secretMask || v == "" {
+		saved, _ := s.store.GetSetting(r.Context(), key)
+		return saved
+	}
+	return v
+}
+
+func (s *Server) handleTestTMDB(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		APIKey string `json:"apiKey"`
+	}
+	if !readJSON(w, r, &in) {
+		return
+	}
+	ctx, cancel := withTimeout(r, testTimeout)
+	defer cancel()
+	t := s.tv.TMDB(ctx)
+	t.Key = s.secretOrSaved(r, tv.SettingTMDBKey, strings.TrimSpace(in.APIKey))
+	if t.Key == "" {
+		t.Key = s.tv.TMDBKey
+	}
+	if err := t.Test(ctx); err != nil {
+		writeJSON(w, http.StatusOK, testResult{OK: false, Error: sentence(err.Error())})
+		return
+	}
+	writeJSON(w, http.StatusOK, testResult{OK: true})
+}
+
+func (s *Server) handleTestJellyfin(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		URL    string `json:"url"`
+		APIKey string `json:"apiKey"`
+	}
+	if !readJSON(w, r, &in) {
+		return
+	}
+	ctx, cancel := withTimeout(r, testTimeout)
+	defer cancel()
+	key := s.secretOrSaved(r, tv.SettingJellyfinAPIKey, strings.TrimSpace(in.APIKey))
+	name, err := s.tv.TestJellyfin(ctx, tv.Jellyfin{URL: strings.TrimSpace(in.URL), APIKey: key})
+	if err != nil {
+		writeJSON(w, http.StatusOK, testResult{OK: false, Error: sentence(err.Error())})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "server": name})
 }
 
 func (s *Server) handleListPresets(w http.ResponseWriter, r *http.Request) {

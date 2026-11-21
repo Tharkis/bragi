@@ -37,6 +37,17 @@ func (s *Server) withUser(next http.Handler) http.Handler {
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			s.log.Error("auth lookup failed", "err", err)
 		}
+		// The Jellyfin plugin signs in with one admin key and names the
+		// Jellyfin user it acts for; Bragi maps that to a requester account.
+		if jf := strings.TrimSpace(r.Header.Get("X-Bragi-User")); jf != "" && u != nil && u.Role == "admin" && r.Header.Get("X-Api-Key") != "" {
+			name := strings.TrimSpace(r.Header.Get("X-Bragi-User-Name"))
+			if mapped, err := s.store.UserByJellyfinID(r.Context(), jf, name, auth.NewAPIKey()); err == nil {
+				u = mapped
+			} else {
+				s.log.Error("mapping Jellyfin user failed", "err", err)
+				u = nil
+			}
+		}
 		if u != nil {
 			r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, u))
 		}
