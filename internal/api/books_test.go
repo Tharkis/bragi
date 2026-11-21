@@ -28,6 +28,7 @@ type bookEnv struct {
 	audio     string
 	downloads string
 	slskdDir  string
+	dl        *fakes.Downloader
 }
 
 // newBookEnv starts Bragi with fake Open Library, Prowlarr, NZBGet,
@@ -61,6 +62,7 @@ func newBookEnv(t *testing.T, withIndexer bool) *bookEnv {
 	prowlarrURL = prowlarr.URL
 	t.Cleanup(prowlarr.Close)
 	dl := &fakes.Downloader{Dir: e.downloads, Duration: time.Millisecond}
+	e.dl = dl
 	nzbget := httptest.NewServer(dl.NZBGet())
 	t.Cleanup(nzbget.Close)
 	qbit := httptest.NewServer(dl.QBittorrent())

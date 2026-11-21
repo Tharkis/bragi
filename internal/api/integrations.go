@@ -81,42 +81,52 @@ func (h integrationHandlers) validate(i *store.Integration) error {
 			return fmt.Errorf("%s is required", f.Label)
 		}
 	}
+	if (strings.TrimSpace(i.RemotePath) == "") != (strings.TrimSpace(i.LocalPath) == "") {
+		return errors.New("fill in both folders of the path mapping, or neither")
+	}
 	if i.Priority == 0 {
 		i.Priority = 25
 	}
 	return nil
 }
 
-// test runs the adapter's connection check.
-func (h integrationHandlers) test(ctx context.Context, i store.Integration) error {
-	cfg := integrations.Config{BaseURL: i.BaseURL, APIKey: i.APIKey, Username: i.Username, Password: i.Password, Category: i.Category}
+// test runs the adapter's connection check. Download clients that can
+// also return warnings, such as a category the client lacks.
+func (h integrationHandlers) test(ctx context.Context, i store.Integration) ([]string, error) {
+	cfg := integrations.Config{BaseURL: i.BaseURL, APIKey: i.APIKey, Username: i.Username, Password: i.Password, Category: i.Category,
+		Categories: i.AllCategories(), RemotePath: i.RemotePath, LocalPath: i.LocalPath}
 	if h.table == store.Indexers {
 		a, err := integrations.NewIndexer(i.Kind, cfg, h.s.hc)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return a.Test(ctx)
+		return nil, a.Test(ctx)
 	}
 	a, err := integrations.NewDownloadClient(i.Kind, cfg, h.s.hc)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return a.Test(ctx)
+	if c, ok := a.(integrations.Checker); ok {
+		return c.Check(ctx)
+	}
+	return nil, a.Test(ctx)
 }
 
 type testResult struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK       bool     `json:"ok"`
+	Error    string   `json:"error,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 func (h integrationHandlers) writeTest(w http.ResponseWriter, r *http.Request, i store.Integration) {
 	ctx, cancel := withTimeout(r, testTimeout)
 	defer cancel()
-	if err := h.test(ctx, i); err != nil {
+	warnings, err := h.test(ctx, i)
+	if err != nil {
 		writeJSON(w, http.StatusOK, testResult{OK: false, Error: sentence(err.Error())})
 		return
 	}
-	writeJSON(w, http.StatusOK, testResult{OK: true})
+	writeJSON(w, http.StatusOK, testResult{OK: true, Warnings: warnings})
 }
 
 func (h integrationHandlers) list(w http.ResponseWriter, r *http.Request) {

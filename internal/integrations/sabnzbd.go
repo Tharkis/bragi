@@ -189,6 +189,7 @@ func (s *sabnzbd) Status(ctx context.Context, jobIDs []string) ([]Job, error) {
 		default:
 			// Verifying, Repairing, Extracting, Moving, Running: still busy.
 			j.State = JobDownloading
+			j.Stage = sl.Status
 		}
 		found[sl.ID] = j
 	}

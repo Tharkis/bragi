@@ -280,29 +280,77 @@ const (
 
 // Integration is a configured indexer or download client.
 type Integration struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	BaseURL   string `json:"baseUrl"`
-	APIKey    string `json:"apiKey"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	Category  string `json:"category"`
-	Enabled   bool   `json:"enabled"`
-	Priority  int    `json:"priority"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	BaseURL  string `json:"baseUrl"`
+	APIKey   string `json:"apiKey"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Category string `json:"category"`
+	// Categories overrides Category per media type (tv, movie, book,
+	// audiobook). Download clients only.
+	Categories map[string]string `json:"categories"`
+	// RemotePath and LocalPath map the client's download folder to where
+	// Bragi sees it. Download clients only.
+	RemotePath string `json:"remotePath"`
+	LocalPath  string `json:"localPath"`
+	Enabled    bool   `json:"enabled"`
+	Priority   int    `json:"priority"`
+	CreatedAt  string `json:"createdAt"`
+	UpdatedAt  string `json:"updatedAt"`
 }
 
-const integrationCols = `id, name, kind, base_url, api_key, username, password, category, enabled, priority, created_at, updated_at`
+// CategoryFor is the category to send a download for mediaType under.
+func (i Integration) CategoryFor(mediaType string) string {
+	if c := strings.TrimSpace(i.Categories[mediaType]); c != "" {
+		return c
+	}
+	return i.Category
+}
+
+// AllCategories lists every category this client may receive.
+func (i Integration) AllCategories() []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, t := range []string{"", "tv", "movie", "book", "audiobook"} {
+		c := i.Category
+		if t != "" {
+			c = i.CategoryFor(t)
+		}
+		if c != "" && !seen[c] {
+			seen[c] = true
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+const integrationCols = `id, name, kind, base_url, api_key, username, password, category, categories, remote_path, local_path,
+	enabled, priority, created_at, updated_at`
 
 func scanIntegration(row interface{ Scan(...any) error }) (*Integration, error) {
 	var i Integration
+	var cats string
 	if err := row.Scan(&i.ID, &i.Name, &i.Kind, &i.BaseURL, &i.APIKey, &i.Username, &i.Password, &i.Category,
-		&i.Enabled, &i.Priority, &i.CreatedAt, &i.UpdatedAt); err != nil {
+		&cats, &i.RemotePath, &i.LocalPath, &i.Enabled, &i.Priority, &i.CreatedAt, &i.UpdatedAt); err != nil {
 		return nil, mapErr(err)
 	}
+	i.Categories = map[string]string{}
+	json.Unmarshal([]byte(cats), &i.Categories)
 	return &i, nil
+}
+
+// categoriesJSON stores only the overrides that are set.
+func categoriesJSON(m map[string]string) string {
+	clean := map[string]string{}
+	for k, v := range m {
+		if v = strings.TrimSpace(v); v != "" {
+			clean[k] = v
+		}
+	}
+	b, _ := json.Marshal(clean)
+	return string(b)
 }
 
 // ListIntegrations returns every row of table t.
@@ -331,9 +379,10 @@ func (s *Store) GetIntegration(ctx context.Context, t IntegrationTable, id int64
 // CreateIntegration inserts a row into table t.
 func (s *Store) CreateIntegration(ctx context.Context, t IntegrationTable, i Integration) (*Integration, error) {
 	res, err := s.DB.ExecContext(ctx, `INSERT INTO `+string(t)+`
-		(name, kind, base_url, api_key, username, password, category, enabled, priority)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		i.Name, i.Kind, i.BaseURL, i.APIKey, i.Username, i.Password, i.Category, i.Enabled, i.Priority)
+		(name, kind, base_url, api_key, username, password, category, categories, remote_path, local_path, enabled, priority)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		i.Name, i.Kind, i.BaseURL, i.APIKey, i.Username, i.Password, i.Category, categoriesJSON(i.Categories),
+		strings.TrimSpace(i.RemotePath), strings.TrimSpace(i.LocalPath), i.Enabled, i.Priority)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -345,8 +394,9 @@ func (s *Store) CreateIntegration(ctx context.Context, t IntegrationTable, i Int
 func (s *Store) UpdateIntegration(ctx context.Context, t IntegrationTable, i Integration) (*Integration, error) {
 	res, err := s.DB.ExecContext(ctx, `UPDATE `+string(t)+` SET
 		name = ?, kind = ?, base_url = ?, api_key = ?, username = ?, password = ?, category = ?,
-		enabled = ?, priority = ?, updated_at = ? WHERE id = ?`,
-		i.Name, i.Kind, i.BaseURL, i.APIKey, i.Username, i.Password, i.Category, i.Enabled, i.Priority, now(), i.ID)
+		categories = ?, remote_path = ?, local_path = ?, enabled = ?, priority = ?, updated_at = ? WHERE id = ?`,
+		i.Name, i.Kind, i.BaseURL, i.APIKey, i.Username, i.Password, i.Category, categoriesJSON(i.Categories),
+		strings.TrimSpace(i.RemotePath), strings.TrimSpace(i.LocalPath), i.Enabled, i.Priority, now(), i.ID)
 	if err != nil {
 		return nil, mapErr(err)
 	}

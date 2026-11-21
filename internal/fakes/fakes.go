@@ -272,11 +272,32 @@ func hashString(s string) uint64 {
 
 // job is a download in a fake client.
 type job struct {
-	id      string
-	name    string
-	started time.Time
-	done    bool
-	removed bool
+	id       string
+	name     string
+	category string
+	started  time.Time
+	done     bool
+	removed  bool
+	// polls counts NZBGet status calls after the download finished, so
+	// PostProcess can show one round of unpacking.
+	polls int
+}
+
+// Grab is a job as a test sees it.
+type Grab struct {
+	ID, Name, Category string
+	Removed            bool
+}
+
+// Grabs lists every job the fake was given, oldest first.
+func (d *Downloader) Grabs() []Grab {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]Grab, len(d.jobs))
+	for i, j := range d.jobs {
+		out[i] = Grab{ID: j.id, Name: j.name, Category: j.category, Removed: j.removed}
+	}
+	return out
 }
 
 // Downloader is a fake NZBGet and qBittorrent in one. A job finishes after
@@ -284,6 +305,16 @@ type job struct {
 type Downloader struct {
 	Dir      string
 	Duration time.Duration
+	// NZBGet options. PostProcess makes a finished NZBGet job show as
+	// UNPACKING for one status call before it reaches the history.
+	// NZBGetRoot is where the fake NZBGet says Dir is, as if it ran in its
+	// own container. NZBGetResult picks a history status by job name;
+	// nil or "" means SUCCESS/ALL. NZBGetCategories is what its config
+	// lists.
+	PostProcess      bool
+	NZBGetRoot       string
+	NZBGetResult     func(name string) string
+	NZBGetCategories []string
 	// Seasons lists episode counts so a season pack gets one file per episode.
 	mu   sync.Mutex
 	jobs []*job
@@ -338,14 +369,24 @@ func (d *Downloader) NZBGet() http.Handler {
 		switch call.Method {
 		case "version":
 			reply("24.5")
+		case "config":
+			opts := []map[string]string{{"Name": "MainDir", "Value": "/downloads"}}
+			for i, c := range d.NZBGetCategories {
+				opts = append(opts, map[string]string{"Name": fmt.Sprintf("Category%d.Name", i+1), "Value": c})
+			}
+			reply(opts)
 		case "append":
-			var name string
+			var name, category string
 			json.Unmarshal(call.Params[0], &name)
+			json.Unmarshal(call.Params[2], &category)
 			d.mu.Lock()
 			d.next++
 			id := d.next
 			d.mu.Unlock()
-			d.add(strconv.Itoa(id), strings.TrimSuffix(name, ".nzb"))
+			j := d.add(strconv.Itoa(id), strings.TrimSuffix(name, ".nzb"))
+			d.mu.Lock()
+			j.category = category
+			d.mu.Unlock()
 			reply(id)
 		case "listgroups":
 			d.mu.Lock()
@@ -355,10 +396,14 @@ func (d *Downloader) NZBGet() http.Handler {
 				if j.removed || len(j.id) > 12 {
 					continue
 				}
+				id, _ := strconv.Atoi(j.id)
 				if p := d.progress(j); p < 1 {
-					id, _ := strconv.Atoi(j.id)
 					out = append(out, map[string]any{"NZBID": id, "Status": "DOWNLOADING", "FileSizeMB": 1000, "RemainingSizeMB": int(1000 * (1 - p)),
-						"DestDir": filepath.Join(d.Dir, "intermediate", j.name)})
+						"DestDir": d.nzbgetPath(filepath.Join(d.Dir, "intermediate", j.name))})
+				} else if d.PostProcess && j.polls == 0 {
+					j.polls++
+					out = append(out, map[string]any{"NZBID": id, "Status": "UNPACKING", "FileSizeMB": 1000, "RemainingSizeMB": 0,
+						"DestDir": d.nzbgetPath(filepath.Join(d.Dir, "intermediate", j.name))})
 				}
 			}
 			reply(out)
@@ -367,11 +412,18 @@ func (d *Downloader) NZBGet() http.Handler {
 			defer d.mu.Unlock()
 			out := []map[string]any{}
 			for _, j := range d.jobs {
-				if j.removed || len(j.id) > 12 || !j.done {
+				if j.removed || len(j.id) > 12 || !j.done || (d.PostProcess && j.polls == 0) {
 					continue
 				}
 				id, _ := strconv.Atoi(j.id)
-				out = append(out, map[string]any{"NZBID": id, "Status": "SUCCESS/ALL", "DestDir": filepath.Join(d.Dir, j.name), "FinalDir": ""})
+				status := "SUCCESS/ALL"
+				if d.NZBGetResult != nil {
+					if s := d.NZBGetResult(j.name); s != "" {
+						status = s
+					}
+				}
+				out = append(out, map[string]any{"NZBID": id, "Kind": "NZB", "Status": status,
+					"DestDir": d.nzbgetPath(filepath.Join(d.Dir, j.name)), "FinalDir": ""})
 			}
 			reply(out)
 		case "editqueue":
@@ -391,6 +443,18 @@ func (d *Downloader) NZBGet() http.Handler {
 			writeJSON(w, map[string]any{"error": map[string]string{"message": "unknown method " + call.Method}})
 		}
 	})
+}
+
+// nzbgetPath is p as the fake NZBGet sees it.
+func (d *Downloader) nzbgetPath(p string) string {
+	if d.NZBGetRoot == "" {
+		return p
+	}
+	rel, err := filepath.Rel(d.Dir, p)
+	if err != nil {
+		return p
+	}
+	return filepath.ToSlash(filepath.Join(d.NZBGetRoot, rel))
 }
 
 // QBittorrent serves the fake qBittorrent Web API.

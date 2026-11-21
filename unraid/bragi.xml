@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Tharkis/bragi/issues</Support>
   <Project>https://github.com/Tharkis/bragi</Project>
-  <Overview>Bragi is one app for your media collection: request a show, and Bragi finds it through Prowlarr or Jackett, sends it to NZBGet or qBittorrent, and files it into your library. TV first; movies, music, books and audiobooks to follow.[br][br]Map your downloads and media under one /data share so Bragi can hardlink instead of copying.</Overview>
+  <Overview>Bragi is one app for your media collection: request a show, and Bragi finds it through Prowlarr or Jackett, sends it to NZBGet, SABnzbd or qBittorrent, and files it into your library. TV, movies, ebooks and audiobooks; music to follow.[br][br]Map your downloads and media under one /data share so Bragi can hardlink instead of copying.</Overview>
   <Category>Downloaders: MediaApp:Video</Category>
   <WebUI>http://[IP]:[PORT:8787]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Tharkis/bragi/main/unraid/bragi.xml</TemplateURL>

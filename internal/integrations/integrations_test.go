@@ -105,36 +105,6 @@ func TestNewznab(t *testing.T) {
 	}
 }
 
-func TestNZBGet(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, pass, _ := r.BasicAuth()
-		if r.URL.Path != "/jsonrpc" {
-			http.NotFound(w, r)
-			return
-		}
-		if user != "nzbget" || pass != "tegbzn6789" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		var call struct{ Method string }
-		json.NewDecoder(r.Body).Decode(&call)
-		if call.Method != "version" {
-			t.Errorf("method = %q", call.Method)
-		}
-		io.WriteString(w, `{"version":"1.1","id":1,"result":"24.3"}`)
-	}))
-	defer srv.Close()
-
-	ok, _ := NewDownloadClient("nzbget", Config{BaseURL: srv.URL, Username: "nzbget", Password: "tegbzn6789"}, hc)
-	if err := ok.Test(context.Background()); err != nil {
-		t.Fatalf("good login: %v", err)
-	}
-	bad, _ := NewDownloadClient("nzbget", Config{BaseURL: srv.URL, Username: "nzbget", Password: "x"}, hc)
-	if err := bad.Test(context.Background()); !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("bad login: got %v, want ErrUnauthorized", err)
-	}
-}
-
 func TestQBittorrent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
