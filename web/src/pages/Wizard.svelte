@@ -29,7 +29,7 @@
         get('/settings'),
       ])
       // Resume where a previous run of the wizard stopped.
-      added = { library: libs[0] ?? null, tmdb: !!settings.tmdb_api_key, indexer: indexers[0] ?? null, client: clients[0] ?? null }
+      added = { library: libs.find((l) => l.mediaType === 'tv') ?? null, tmdb: !!settings.tmdb_api_key, indexer: indexers[0] ?? null, client: clients.find((c) => c.enabled) ?? clients[0] ?? null }
       step = !added.library ? 0 : !added.tmdb ? 1 : !added.indexer ? 2 : !added.client ? 3 : 4
     } catch (e) {
       error = e.message
