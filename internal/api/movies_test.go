@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tharkis/bragi/internal/movies"
+	"github.com/Tharkis/bragi/internal/scan"
 	"github.com/Tharkis/bragi/internal/store"
 )
 
@@ -208,7 +208,7 @@ func TestAdoptExistingMovies(t *testing.T) {
 	if code := e.do("POST", "/api/v1/libraries/scan?type=movie", nil, nil); code != 202 {
 		t.Fatalf("scan: %d", code)
 	}
-	var st movies.ScanStatus
+	var st scan.Status
 	for i := 0; i < 100; i++ {
 		e.do("GET", "/api/v1/libraries/scan?type=movie", nil, &st)
 		if !st.Running {

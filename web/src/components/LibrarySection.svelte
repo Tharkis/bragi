@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte'
-  import { get, post, del } from '../lib/api.js'
+  import { get, post, put, del } from '../lib/api.js'
+  import { onEvents } from '../lib/events.js'
 
   let libraries = $state([])
   let presets = $state([])
@@ -25,7 +26,45 @@
       error = e.message
     }
   }
-  onMount(load)
+  let scans = $state(null)
+  async function loadScans() {
+    try {
+      scans = await get('/libraries/scan/all')
+    } catch (e) {
+      error = e.message
+    }
+  }
+  onMount(() => {
+    load()
+    loadScans()
+    return onEvents(['scan'], loadScans)
+  })
+
+  async function scanAll() {
+    error = ''
+    try {
+      scans = await post('/libraries/scan/all')
+    } catch (e) {
+      error = e.message
+    }
+  }
+
+  async function setNightly(on) {
+    try {
+      await put('/settings', { nightly_scan: on ? 'true' : 'false' })
+      await loadScans()
+    } catch (e) {
+      error = e.message
+    }
+  }
+
+  const hourLabel = (h) => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const when = (iso) => {
+    if (!iso) return 'never'
+    const d = new Date(iso)
+    return d.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+  }
+  const runningType = $derived(scans && Object.values(scans.types).find((t) => t.running))
 
   const presetName = (id) => presets.find((p) => p.id === id)?.name ?? 'None'
 
@@ -111,3 +150,34 @@
 {:else if !adding}
   <div class="card muted">None yet.</div>
 {/if}
+
+{#if libraries.length && scans}
+  <div class="card scanall">
+    <div class="spread">
+      <div>
+        <strong>Find what's already there</strong>
+        <div class="small muted">
+          Scanning adds the shows, movies and books already in these folders, as they are. Nothing is moved, renamed or downloaded.
+        </div>
+      </div>
+      <button onclick={scanAll} disabled={scans.running}>{scans.running ? 'Scanning…' : 'Scan all libraries'}</button>
+    </div>
+    {#if runningType}
+      <div class="small">Scanning {runningType.library}{runningType.total ? `: ${runningType.done} of ${runningType.total}` : '…'}</div>
+      <div class="bar"><div style="width: {runningType.total ? (100 * runningType.done) / runningType.total : 0}%"></div></div>
+    {/if}
+    <label class="check">
+      <input type="checkbox" checked={scans.nightly} onchange={(e) => setNightly(e.currentTarget.checked)} />
+      <span>Scan every library each night at {hourLabel(scans.hour)} to pick up files added outside Bragi</span>
+    </label>
+    <div class="small muted">Last full scan: {when(scans.lastFull)}</div>
+  </div>
+{/if}
+
+<style>
+  .scanall {
+    margin-top: 16px;
+    display: grid;
+    gap: 10px;
+  }
+</style>

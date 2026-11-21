@@ -15,6 +15,7 @@ import (
 	"github.com/Tharkis/bragi/internal/books"
 	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/movies"
+	"github.com/Tharkis/bragi/internal/scan"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
 )
@@ -31,6 +32,7 @@ type Server struct {
 	books   *books.Service
 	movies  *movies.Service
 	events  *events.Hub
+	scans   *scan.Manager
 }
 
 // Options configures a Server.
@@ -51,6 +53,9 @@ type Options struct {
 	Movies *movies.Service
 	// Events carries live status changes to /api/v1/events.
 	Events *events.Hub
+	// Scans runs library scans. Nil builds one that runs scans but not the
+	// nightly scan's clock, for tests.
+	Scans *scan.Manager
 }
 
 // New returns the HTTP handler for the whole app.
@@ -74,8 +79,12 @@ func New(o Options) http.Handler {
 	if o.Books == nil {
 		o.Books = books.New(o.Store, o.HTTPClient, o.Logger, o.Events)
 	}
+	if o.Scans == nil {
+		o.Scans = NewScanManager(o.Store, o.Logger, o.Events, o.TV, o.Movies, o.Books)
+		go o.Scans.Run(context.Background())
+	}
 	s := &Server{store: o.Store, log: o.Logger, version: o.Version, hc: o.HTTPClient, ui: o.UI, mux: http.NewServeMux(),
-		tv: o.TV, movies: o.Movies, books: o.Books, events: o.Events}
+		tv: o.TV, movies: o.Movies, books: o.Books, events: o.Events, scans: o.Scans}
 	s.routes()
 	return s.withUser(s.logRequests(s.mux))
 }
@@ -124,6 +133,11 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/v1/settings/test/jellyfin", s.requireAdmin(s.handleTestJellyfin))
 	m.HandleFunc("POST /api/v1/libraries/scan", s.requireAdmin(s.handleStartScan))
 	m.HandleFunc("GET /api/v1/libraries/scan", s.requireAdmin(s.handleScanState))
+	m.HandleFunc("POST /api/v1/libraries/scan/all", s.requireAdmin(s.handleScanAll))
+	m.HandleFunc("GET /api/v1/libraries/scan/all", s.requireAdmin(s.handleScanAllState))
+	m.HandleFunc("GET /api/v1/libraries/unmatched", s.requireAdmin(s.handleListUnmatched))
+	m.HandleFunc("POST /api/v1/libraries/unmatched/{id}/match", s.requireAdmin(s.handleMatchUnmatched))
+	m.HandleFunc("PUT /api/v1/libraries/unmatched/{id}/ignore", s.requireAdmin(s.handleIgnoreUnmatched))
 
 	// Discover and requests: the API the web UI, scripts and the Jellyfin
 	// plugin share.

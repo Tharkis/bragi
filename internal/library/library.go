@@ -102,3 +102,18 @@ func CopyFile(src, dest string) error {
 	}
 	return os.Rename(tmp, dest)
 }
+
+// Folders lists the visible sub-folders of dir by name.
+func Folders(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			out = append(out, e.Name())
+		}
+	}
+	return out, nil
+}

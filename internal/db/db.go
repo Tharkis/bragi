@@ -81,24 +81,57 @@ func Migrate(ctx context.Context, d *sql.DB) error {
 		if err != nil {
 			return err
 		}
+		// A migration that rebuilds a table other tables point at starts
+		// with this line: foreign keys are switched off around it (SQLite
+		// cannot do that inside a transaction), so dropping the old table
+		// does not cascade, and checked before it commits.
+		noFK := strings.HasPrefix(string(body), "-- bragi:rebuild")
+		if noFK {
+			if _, err := d.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+				return err
+			}
+		}
+		err = applyMigration(ctx, d, string(body), version, noFK)
+		if noFK {
+			d.ExecContext(ctx, `PRAGMA foreign_keys = ON`)
+		}
+		if err != nil {
+			return fmt.Errorf("migration %s: %w", base, err)
+		}
+	}
+	return nil
+}
+
+func applyMigration(ctx context.Context, d *sql.DB, body string, version int, checkFK bool) error {
+	{
 		tx, err := d.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, string(body)); err != nil {
+		if _, err := tx.ExecContext(ctx, body); err != nil {
 			tx.Rollback()
-			return fmt.Errorf("migration %s: %w", base, err)
+			return err
+		}
+		if checkFK {
+			rows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			bad := rows.Next()
+			rows.Close()
+			if bad {
+				tx.Rollback()
+				return fmt.Errorf("foreign key check failed")
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
 			version, time.Now().UTC().Format(time.RFC3339)); err != nil {
 			tx.Rollback()
 			return err
 		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
+		return tx.Commit()
 	}
-	return nil
 }
 
 // Backup writes a consistent snapshot of the database to dir and keeps the

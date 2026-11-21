@@ -625,53 +625,6 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-func (s *Server) handleStartScan(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		LibraryID int64 `json:"libraryId"`
-	}
-	if r.ContentLength > 0 && !readJSON(w, r, &in) {
-		return
-	}
-	mediaType := r.URL.Query().Get("type")
-	if in.LibraryID != 0 {
-		if lib, err := s.store.GetLibrary(r.Context(), in.LibraryID); err == nil {
-			mediaType = lib.MediaType
-		}
-	}
-	if mediaType == "movie" {
-		err := s.movies.StartScan(r.Context(), in.LibraryID)
-		switch {
-		case errors.Is(err, movies.ErrScanRunning):
-			writeError(w, http.StatusConflict, sentence(err.Error()))
-		case err != nil:
-			s.metadataError(w, err)
-		default:
-			writeJSON(w, http.StatusAccepted, s.movies.ScanState())
-		}
-		return
-	}
-	err := s.tv.StartScan(r.Context(), in.LibraryID)
-	switch {
-	case errors.Is(err, tv.ErrScanRunning):
-		writeError(w, http.StatusConflict, sentence(err.Error()))
-		return
-	case err != nil:
-		s.metadataError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusAccepted, s.tv.ScanState())
-}
-
-// handleScanState returns the current or last scan of the TV folder, or of
-// the movie folder with ?type=movie.
-func (s *Server) handleScanState(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("type") == "movie" {
-		writeJSON(w, http.StatusOK, s.movies.ScanState())
-		return
-	}
-	writeJSON(w, http.StatusOK, s.tv.ScanState())
-}
-
 // ---- Activity ----
 
 type downloadResponse struct {

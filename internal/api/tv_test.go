@@ -18,6 +18,7 @@ import (
 	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/fakes"
 	"github.com/Tharkis/bragi/internal/movies"
+	"github.com/Tharkis/bragi/internal/scan"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
 )
@@ -285,7 +286,7 @@ func TestAdoptExistingLibrary(t *testing.T) {
 	if code := e.do("POST", "/api/v1/libraries/scan", nil, nil); code != 202 {
 		t.Fatalf("scan: %d", code)
 	}
-	var st tv.ScanStatus
+	var st scan.Status
 	for i := 0; i < 100; i++ {
 		e.do("GET", "/api/v1/libraries/scan", nil, &st)
 		if !st.Running {
