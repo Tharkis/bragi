@@ -195,6 +195,10 @@ func Prowlarr(base func() string) http.Handler {
 	})
 	m.HandleFunc("/api/v1/search", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("query")
+		if cats := r.URL.Query()["categories"]; len(cats) > 0 && (strings.HasPrefix(cats[0], "70") || strings.HasPrefix(cats[0], "30")) {
+			writeJSON(w, bookReleases(q, cats, base()))
+			return
+		}
 		mm := reQuery.FindStringSubmatch(q)
 		out := []map[string]any{}
 		if mm == nil {
@@ -287,7 +291,12 @@ func (d *Downloader) progress(j *job) float64 {
 		j.done = true
 		dir := filepath.Join(d.Dir, j.name)
 		os.MkdirAll(dir, 0o755)
-		if m := rePack.FindStringSubmatch(j.name); m != nil {
+		if files := bookFiles(j.name); files != nil {
+			for name, body := range files {
+				os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
+				os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
+			}
+		} else if m := rePack.FindStringSubmatch(j.name); m != nil {
 			for e := 1; e <= 10; e++ {
 				os.WriteFile(filepath.Join(dir, fmt.Sprintf("%s.S%sE%02d.%s.mkv", m[1], m[2], e, m[3])), []byte("fake video"), 0o644)
 			}

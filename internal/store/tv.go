@@ -496,6 +496,8 @@ type Download struct {
 	UpdatedAt        string  `json:"updatedAt"`
 
 	// Filled for display: the show and what the download covers.
+	// MediaType is the type of the item it is for (tv, book, ...).
+	MediaType   string `json:"mediaType"`
 	SeriesID    int64  `json:"seriesId"`
 	SeriesTitle string `json:"seriesTitle"`
 	PosterPath  string `json:"posterPath,omitempty"`
@@ -509,7 +511,7 @@ const downloadCols = `d.id, COALESCE(d.media_item_id, 0), COALESCE(d.download_cl
 	COALESCE(CASE m.level WHEN 'work' THEN m.id WHEN 'unit' THEN p.id ELSE g.id END, 0),
 	COALESCE(CASE m.level WHEN 'work' THEN m.title WHEN 'unit' THEN p.title ELSE g.title END, ''),
 	COALESCE(CASE m.level WHEN 'work' THEN m.poster_path WHEN 'unit' THEN p.poster_path ELSE g.poster_path END, ''),
-	COALESCE(c.name, '')`
+	COALESCE(c.name, ''), COALESCE(m.media_type, '')`
 
 const downloadFrom = ` FROM downloads d
 	LEFT JOIN media_items m ON m.id = d.media_item_id
@@ -523,10 +525,17 @@ func scanDownload(row interface{ Scan(...any) error }) (*Download, error) {
 	var num, parentNum int
 	if err := row.Scan(&d.ID, &d.MediaItemID, &d.DownloadClientID, &d.ClientJobID, &d.ReleaseTitle, &d.Protocol, &d.Indexer,
 		&d.SizeBytes, &d.Quality, &d.Status, &d.Progress, &d.OutputPath, &d.Error, &d.CreatedAt, &d.UpdatedAt,
-		&level, &num, &parentNum, &d.SeriesID, &d.SeriesTitle, &d.PosterPath, &d.ClientName); err != nil {
+		&level, &num, &parentNum, &d.SeriesID, &d.SeriesTitle, &d.PosterPath, &d.ClientName, &d.MediaType); err != nil {
 		return nil, mapErr(err)
 	}
 	switch level {
+	case "work":
+		switch d.MediaType {
+		case "book":
+			d.Label = "Ebook"
+		case "audiobook":
+			d.Label = "Audiobook"
+		}
 	case "unit":
 		d.Label = seasonTitle(num)
 	case "leaf":
@@ -587,6 +596,12 @@ func (s *Store) ActiveDownloads(ctx context.Context) ([]Download, error) {
 	return s.queryDownloads(ctx, `d.status IN ('queued', 'downloading', 'completed', 'importing') ORDER BY d.id`)
 }
 
+// ActiveDownloadsOf returns the unfinished downloads for one media type.
+// Each media type's pipeline polls only its own.
+func (s *Store) ActiveDownloadsOf(ctx context.Context, mediaType string) ([]Download, error) {
+	return s.queryDownloads(ctx, `d.status IN ('queued', 'downloading', 'completed', 'importing') AND m.media_type = ? ORDER BY d.id`, mediaType)
+}
+
 // DownloadHistory returns finished downloads, newest first.
 func (s *Store) DownloadHistory(ctx context.Context, limit int) ([]Download, error) {
 	return s.queryDownloads(ctx, `d.status IN ('imported', 'failed') ORDER BY d.updated_at DESC, d.id DESC LIMIT ?`, limit)
@@ -603,11 +618,14 @@ func (s *Store) UpdateDownload(ctx context.Context, id int64, status string, pro
 
 // Request is someone asking for a show.
 type Request struct {
-	ID          int64  `json:"id"`
-	UserID      int64  `json:"userId"`
-	Username    string `json:"username"`
-	MediaType   string `json:"type"`
-	TMDBID      int64  `json:"tmdbId"`
+	ID        int64  `json:"id"`
+	UserID    int64  `json:"userId"`
+	Username  string `json:"username"`
+	MediaType string `json:"type"`
+	TMDBID    int64  `json:"tmdbId"`
+	// ForeignID is the Open Library work for books and audiobooks.
+	ForeignID   string `json:"bookId,omitempty"`
+	Author      string `json:"author,omitempty"`
 	Title       string `json:"title"`
 	Year        int    `json:"year,omitempty"`
 	PosterPath  string `json:"posterPath,omitempty"`
@@ -619,12 +637,12 @@ type Request struct {
 	UpdatedAt   string `json:"updatedAt"`
 }
 
-const requestCols = `r.id, r.user_id, COALESCE(u.username, ''), r.media_type, r.tmdb_id, r.title, r.year, r.poster_path, r.scope, r.status, r.reason,
+const requestCols = `r.id, r.user_id, COALESCE(u.username, ''), r.media_type, r.tmdb_id, r.foreign_id, r.author, r.title, r.year, r.poster_path, r.scope, r.status, r.reason,
 	COALESCE(r.media_item_id, 0), r.created_at, r.updated_at`
 
 func scanRequest(row interface{ Scan(...any) error }) (*Request, error) {
 	var r Request
-	if err := row.Scan(&r.ID, &r.UserID, &r.Username, &r.MediaType, &r.TMDBID, &r.Title, &r.Year, &r.PosterPath, &r.Scope, &r.Status, &r.Reason,
+	if err := row.Scan(&r.ID, &r.UserID, &r.Username, &r.MediaType, &r.TMDBID, &r.ForeignID, &r.Author, &r.Title, &r.Year, &r.PosterPath, &r.Scope, &r.Status, &r.Reason,
 		&r.MediaItemID, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return nil, mapErr(err)
 	}
@@ -633,8 +651,9 @@ func scanRequest(row interface{ Scan(...any) error }) (*Request, error) {
 
 // CreateRequest stores a request.
 func (s *Store) CreateRequest(ctx context.Context, r Request) (*Request, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO requests (user_id, media_type, tmdb_id, title, year, poster_path, scope, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.UserID, r.MediaType, r.TMDBID, r.Title, r.Year, r.PosterPath, r.Scope, r.Status)
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO requests (user_id, media_type, tmdb_id, foreign_id, author, title, year, poster_path, scope, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.UserID, r.MediaType, r.TMDBID, r.ForeignID, r.Author, r.Title, r.Year, r.PosterPath, r.Scope, r.Status)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -652,6 +671,9 @@ type RequestFilter struct {
 	UserID int64 // 0 for everyone
 	Status string
 	TMDBID int64
+	// MediaType and ForeignID find requests for a book or audiobook.
+	MediaType string
+	ForeignID string
 }
 
 // ListRequests returns requests, newest first.
@@ -669,6 +691,14 @@ func (s *Store) ListRequests(ctx context.Context, f RequestFilter) ([]Request, e
 	if f.TMDBID != 0 {
 		where = append(where, "r.tmdb_id = ?")
 		args = append(args, f.TMDBID)
+	}
+	if f.MediaType != "" {
+		where = append(where, "r.media_type = ?")
+		args = append(args, f.MediaType)
+	}
+	if f.ForeignID != "" {
+		where = append(where, "r.foreign_id = ?")
+		args = append(args, f.ForeignID)
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT `+requestCols+` FROM requests r LEFT JOIN users u ON u.id = r.user_id
 		WHERE `+strings.Join(where, " AND ")+` ORDER BY r.id DESC LIMIT 500`, args...)

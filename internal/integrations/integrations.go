@@ -150,6 +150,12 @@ var kinds = []Kind{
 		Fields: []Field{fieldBaseURL("http://192.168.1.10:6789"), fieldUsername, fieldPassword, fieldCategory}},
 	{ID: "qbittorrent", Label: "qBittorrent", Role: RoleDownloader, Protocols: []Protocol{Torrent},
 		Fields: []Field{fieldBaseURL("http://192.168.1.10:8080"), fieldUsername, fieldPassword, fieldCategory}},
+	{ID: "slskd", Label: "slskd (Soulseek)", Role: RoleDownloader, Protocols: []Protocol{Soulseek},
+		Fields: []Field{fieldBaseURL("http://192.168.1.10:5030"),
+			{Name: "apiKey", Label: "API key", Type: "password", Required: true,
+				Help: "An API key from slskd's settings (web.authentication.api_keys)."},
+			{Name: "category", Label: "Downloads folder", Type: "text", Placeholder: "Ask slskd",
+				Help: "Where slskd's finished downloads are, as Bragi sees the path. Leave empty if slskd and Bragi use the same path."}}},
 }
 
 // Kinds returns every supported integration kind.
@@ -189,6 +195,8 @@ func NewDownloadClient(kind string, cfg Config, hc *http.Client) (DownloadClient
 		return &nzbget{cfg: cfg, hc: hc}, nil
 	case "qbittorrent":
 		return &qbittorrent{cfg: cfg, hc: hc}, nil
+	case "slskd":
+		return &slskd{cfg: cfg, hc: hc}, nil
 	}
 	return nil, fmt.Errorf("unknown download client kind %q", kind)
 }

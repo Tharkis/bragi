@@ -20,7 +20,7 @@ import (
 // PollDownloads asks each download client about Bragi's active downloads,
 // records progress, imports finished ones and retries failed ones.
 func (s *Service) PollDownloads(ctx context.Context) error {
-	active, err := s.Store.ActiveDownloads(ctx)
+	active, err := s.Store.ActiveDownloadsOf(ctx, "tv")
 	if err != nil || len(active) == 0 {
 		return err
 	}

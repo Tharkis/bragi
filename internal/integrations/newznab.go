@@ -74,6 +74,19 @@ func (n *newznab) Test(ctx context.Context) error {
 // tvCategory is the Newznab category for all TV.
 const tvCategory = "5000"
 
+// searchParams picks the Newznab search function and categories for a
+// media type.
+func searchParams(q Query) (fn string, cats []string) {
+	switch q.MediaType {
+	case "book":
+		// Books, and the Ebook subcategory some indexers use on its own.
+		return "search", []string{"7000", "7020"}
+	case "audiobook":
+		return "search", []string{"3030"}
+	}
+	return "tvsearch", []string{tvCategory}
+}
+
 func (n *newznab) Search(ctx context.Context, q Query) ([]Release, error) {
 	u, err := url.Parse(n.apiURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
@@ -83,12 +96,13 @@ func (n *newznab) Search(ctx context.Context, q Query) ([]Release, error) {
 	if n.cfg.APIKey != "" {
 		v.Set("apikey", n.cfg.APIKey)
 	}
-	v.Set("t", "tvsearch")
-	v.Set("cat", tvCategory)
+	fn, cats := searchParams(q)
+	v.Set("t", fn)
+	v.Set("cat", strings.Join(cats, ","))
 	v.Set("limit", "100")
 	v.Set("extended", "1")
 	v.Set("q", q.Text)
-	if q.Season > 0 {
+	if fn == "tvsearch" && q.Season > 0 {
 		v.Set("season", strconv.Itoa(q.Season))
 		if q.Episode > 0 {
 			v.Set("ep", strconv.Itoa(q.Episode))

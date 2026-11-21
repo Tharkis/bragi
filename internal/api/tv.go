@@ -58,8 +58,11 @@ type discoverResult struct {
 
 func (s *Server) handleDiscoverSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if t := r.URL.Query().Get("type"); t != "" && t != "tv" {
-		writeError(w, http.StatusBadRequest, "only type=tv is supported so far")
+	if t := r.URL.Query().Get("type"); store.IsBookType(t) {
+		s.handleDiscoverBooks(w, r, t)
+		return
+	} else if t != "" && t != "tv" {
+		writeError(w, http.StatusBadRequest, "type must be tv, book or audiobook")
 		return
 	}
 	if q == "" {
@@ -123,6 +126,8 @@ type requestBody struct {
 	Type   string          `json:"type"`
 	TMDBID int64           `json:"tmdbId"`
 	Scope  json.RawMessage `json:"seasons"`
+	// BookID is the Open Library work, for type book or audiobook.
+	BookID string `json:"bookId"`
 }
 
 type requestProgress struct {
@@ -143,6 +148,9 @@ type requestResponse struct {
 }
 
 func (s *Server) toRequestResponse(ctx context.Context, rq store.Request, withEpisodes bool) requestResponse {
+	if store.IsBookType(rq.MediaType) {
+		return s.bookRequestResponse(ctx, rq)
+	}
 	out := requestResponse{Request: rq, PosterURL: posterURL(rq.PosterPath, "w185")}
 	var scope tv.Scope
 	if json.Unmarshal([]byte(rq.Scope), &scope) == nil && len(scope.Seasons) > 0 {
@@ -175,8 +183,12 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 	if in.Type == "" {
 		in.Type = "tv"
 	}
+	if store.IsBookType(in.Type) {
+		s.createBookRequest(w, r, in)
+		return
+	}
 	if in.Type != "tv" {
-		writeError(w, http.StatusBadRequest, "only type tv can be requested so far")
+		writeError(w, http.StatusBadRequest, "type must be tv, book or audiobook")
 		return
 	}
 	if in.TMDBID <= 0 {
@@ -225,6 +237,9 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 // request stays pending with the reason, so an admin can fix the cause and
 // approve again.
 func (s *Server) approve(ctx context.Context, rq *store.Request, reason string) (*store.Request, error) {
+	if store.IsBookType(rq.MediaType) {
+		return s.approveBook(ctx, rq, reason)
+	}
 	var scope tv.Scope
 	json.Unmarshal([]byte(rq.Scope), &scope)
 	actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
@@ -316,6 +331,10 @@ func (s *Server) handleApproveRequest(w http.ResponseWriter, r *http.Request) {
 	out, err := s.approve(r.Context(), rq, in.Reason)
 	s.events.Publish(eventRequest(out))
 	if err != nil {
+		if store.IsBookType(rq.MediaType) {
+			s.bookError(w, err)
+			return
+		}
 		s.metadataError(w, err)
 		return
 	}
@@ -623,7 +642,11 @@ type downloadResponse struct {
 func toDownloads(ds []store.Download) []downloadResponse {
 	out := make([]downloadResponse, 0, len(ds))
 	for _, d := range ds {
-		out = append(out, downloadResponse{Download: d, Size: release.HumanSize(d.SizeBytes), PosterURL: posterURL(d.PosterPath, "w92")})
+		p := posterURL(d.PosterPath, "w92")
+		if store.IsBookType(d.MediaType) {
+			p = coverURL(d.PosterPath, "S")
+		}
+		out = append(out, downloadResponse{Download: d, Size: release.HumanSize(d.SizeBytes), PosterURL: p})
 	}
 	return out
 }
@@ -651,6 +674,11 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
+		return
+	}
+	if d, err := s.store.GetDownload(r.Context(), id); err == nil && store.IsBookType(d.MediaType) {
+		s.books.Cancel(r.Context(), d)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if err := s.tv.Cancel(r.Context(), id); err != nil {

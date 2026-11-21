@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Tharkis/bragi/internal/api"
+	"github.com/Tharkis/bragi/internal/books"
 	"github.com/Tharkis/bragi/internal/config"
 	"github.com/Tharkis/bragi/internal/db"
 	"github.com/Tharkis/bragi/internal/events"
@@ -77,11 +78,14 @@ func run() error {
 	pipeline := tv.New(st, hc, log, hub)
 	pipeline.TMDBKey = cfg.TMDBKey
 	go pipeline.Run(ctx)
+	bookPipeline := books.New(st, hc, log, hub)
+	bookPipeline.OnImported = pipeline.RefreshJellyfin
+	go bookPipeline.Run(ctx)
 
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
 		Handler: api.New(api.Options{Store: st, Logger: log, Version: version, UI: ui,
-			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Events: hub}),
+			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Books: bookPipeline, Events: hub}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
