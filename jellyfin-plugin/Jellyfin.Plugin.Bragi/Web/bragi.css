@@ -15,10 +15,11 @@ body.bragi-open { overflow: hidden; }
     padding: 14px 0 10px; background: #101010;
 }
 .bragi-panel-head h2 { margin: 0; font-size: 1.6em; font-weight: 500; }
-.bragi-tabs { display: flex; gap: 0.3em; flex: 1; }
+.bragi-tabs { display: flex; gap: 0.3em; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.bragi-tabs::-webkit-scrollbar { display: none; }
 .bragi-tab {
     background: none; border: 0; color: rgba(255, 255, 255, 0.7); font: inherit; font-size: 1em;
-    padding: 0.5em 0.9em; border-radius: 99px; cursor: pointer;
+    padding: 0.5em 0.9em; border-radius: 99px; cursor: pointer; white-space: nowrap; flex: none;
 }
 .bragi-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
 .bragi-tab-active { color: #fff; background: rgba(0, 164, 220, 0.25); }
@@ -126,4 +127,8 @@ body.bragi-open { overflow: hidden; }
 .bragi-header-btn-mui .bragi-icon { width: 24px; height: 24px; }
 
 .bragi-poster.bragi-square { aspect-ratio: 1 / 1; }
+.bragi-kind {
+    display: inline-block; margin-left: 0.6em; padding: 0.1em 0.5em; border-radius: 4px; vertical-align: 0.1em;
+    font-size: 0.72em; font-weight: 500; color: rgba(255, 255, 255, 0.75); background: rgba(255, 255, 255, 0.1);
+}
 .bragi-poster.bragi-round { border-radius: 50%; }

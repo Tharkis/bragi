@@ -328,3 +328,20 @@ func (s *Server) handleGrabMovie(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
+
+// handleTrendingMovies is GET /discover/trending?type=movie: this week's
+// trending movies, marked with what is in the library or requested.
+func (s *Server) handleTrendingMovies(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	found, _, err := s.tv.TMDB(ctx).TrendingMovies(ctx, 1)
+	if err != nil {
+		s.metadataError(w, err)
+		return
+	}
+	out := make([]discoverMovie, 0, len(found))
+	for _, m := range found {
+		out = append(out, s.toDiscoverMovie(ctx, m))
+	}
+	writeJSON(w, http.StatusOK, out)
+}

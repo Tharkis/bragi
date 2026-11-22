@@ -151,6 +151,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/v1/discover/search", s.requireUser(s.handleDiscoverSearch))
 	m.HandleFunc("GET /api/v1/discover/tv/{id}", s.requireUser(s.handleDiscoverShow))
 	m.HandleFunc("GET /api/v1/discover/trending", s.requireUser(s.handleDiscoverTrending))
+	m.HandleFunc("GET /api/v1/discover/types", s.requireUser(s.handleDiscoverTypes))
 	m.HandleFunc("POST /api/v1/requests", s.requireUser(s.handleCreateRequest))
 	m.HandleFunc("GET /api/v1/requests", s.requireUser(s.handleListRequests))
 	m.HandleFunc("GET /api/v1/requests/{id}", s.requireUser(s.handleGetRequest))

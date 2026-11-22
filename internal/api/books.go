@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Tharkis/bragi/internal/books"
@@ -346,4 +347,50 @@ func (s *Server) handleGrabBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// trendingBooks caches Open Library's weekly trending list, which is slow to
+// answer and changes slowly.
+var trendingBooks struct {
+	sync.Mutex
+	at    time.Time
+	src   string
+	books []metadata.Book
+}
+
+const trendingBooksTTL = 3 * time.Hour
+
+func (s *Server) trendingBookList(ctx context.Context) ([]metadata.Book, error) {
+	trendingBooks.Lock()
+	defer trendingBooks.Unlock()
+	if trendingBooks.src == metadata.OpenLibraryURL && time.Since(trendingBooks.at) < trendingBooksTTL {
+		return trendingBooks.books, nil
+	}
+	found, err := s.books.OpenLibrary().TrendingBooks(ctx, 24)
+	if err != nil {
+		return nil, err
+	}
+	trendingBooks.at, trendingBooks.src, trendingBooks.books = time.Now(), metadata.OpenLibraryURL, found
+	return found, nil
+}
+
+// handleTrendingBooks is GET /discover/trending?type=book|audiobook: Open
+// Library's weekly trending works, marked for that format. A failure gives
+// an empty list, so the plugin just shows its search hint.
+func (s *Server) handleTrendingBooks(w http.ResponseWriter, r *http.Request, mediaType string) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	found, err := s.trendingBookList(ctx)
+	if err != nil {
+		s.log.Warn("trending books", "err", err)
+		found = nil
+	}
+	out := make([]bookResult, 0, len(found))
+	for _, b := range found {
+		d := bookResult{BookID: b.ID, Type: mediaType, Title: b.Title, Author: b.Author, Year: b.Year,
+			CoverURL: coverURL(metadata.CoverIDString(b.CoverID), "M")}
+		s.annotateBook(ctx, &d)
+		out = append(out, d)
+	}
+	writeJSON(w, http.StatusOK, out)
 }

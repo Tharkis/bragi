@@ -1,6 +1,6 @@
 # Bragi for Jellyfin
 
-A Jellyfin plugin that lets everyone on your server find shows and request them from [Bragi](../README.md) without leaving Jellyfin. Requests carry each person's Jellyfin name and go through Bragi's approval, the same as requests made in Bragi.
+A Jellyfin plugin that lets everyone on your server find shows, movies, music, ebooks and audiobooks and request them from [Bragi](../README.md) without leaving Jellyfin. Requests carry each person's Jellyfin name and go through Bragi's approval, the same as requests made in Bragi.
 
 Needs Jellyfin 12.
 
@@ -8,7 +8,8 @@ Needs Jellyfin 12.
 
 **Web and mobile apps** (browsers, Jellyfin Media Player, the Android and iOS apps):
 
-- A **Request** button in the header. It opens a panel with this week's trending shows, a **Music** tab to follow an artist or request an album, a search box, and **My requests** with each request's status and progress.
+- A **Request** button in the header. It opens a panel with tabs for **Shows**, **Movies**, **Music**, **Ebooks** and **Audiobooks**, each with a search box and this week's trending titles, and **My requests** with each request's status and progress. A tab only shows when Bragi has a library for it.
+- Movies, ebooks and audiobooks are one click: **Request**. Ebooks and audiobooks are separate requests, so you can ask for one format or both. Music can follow an artist or request one album.
 - **Request from Bragi** under Jellyfin's own search results, for shows you don't have yet.
 - Requesting asks which seasons: all, the latest, only new episodes, or a pick.
 

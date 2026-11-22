@@ -24,8 +24,16 @@ func (s *Server) handleDiscoverTrending(w http.ResponseWriter, r *http.Request) 
 		s.handleTrendingMusic(w, r)
 		return
 	}
-	if t := r.URL.Query().Get("type"); t != "" && t != "tv" {
-		writeError(w, http.StatusBadRequest, "only type=tv or type=music is supported so far")
+	switch t := r.URL.Query().Get("type"); t {
+	case "", "tv":
+	case "movie":
+		s.handleTrendingMovies(w, r)
+		return
+	case "book", "audiobook":
+		s.handleTrendingBooks(w, r, t)
+		return
+	default:
+		writeError(w, http.StatusBadRequest, "type must be tv, movie, music, book or audiobook")
 		return
 	}
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
@@ -62,4 +70,26 @@ func (s *Server) markShow(ctx context.Context, sh metadata.Show) discoverResult 
 		}
 	}
 	return d
+}
+
+// handleDiscoverTypes is GET /discover/types: the media types Bragi has a
+// library for, in a fixed order, so request clients (the Jellyfin plugin)
+// only offer what Bragi can take. Any signed-in user may ask.
+func (s *Server) handleDiscoverTypes(w http.ResponseWriter, r *http.Request) {
+	libs, err := s.store.ListLibraries(r.Context())
+	if err != nil {
+		s.storeError(w, err, "libraries")
+		return
+	}
+	has := map[string]bool{}
+	for _, l := range libs {
+		has[l.MediaType] = true
+	}
+	out := []string{}
+	for _, t := range []string{"tv", "movie", "music", "book", "audiobook"} {
+		if has[t] {
+			out = append(out, t)
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }

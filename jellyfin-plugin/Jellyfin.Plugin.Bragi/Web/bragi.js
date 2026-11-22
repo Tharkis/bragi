@@ -1,5 +1,6 @@
 // Bragi for the Jellyfin web client: a Request button in the header that
-// opens a panel to find and request shows, a "My requests" list, and Bragi
+// opens a panel to find and request shows, movies, music, ebooks and
+// audiobooks, a "My requests" list, and Bragi
 // results under Jellyfin's own search results. Every call goes through the
 // plugin's /Bragi endpoints, which add the Bragi key on the server.
 (function () {
@@ -7,7 +8,20 @@
     if (window.__bragiLoaded) return;
     window.__bragiLoaded = true;
 
-    var state = { enabled: false, panel: null, tab: 'discover', searchTimer: null, lastSearch: '' };
+    var state = { enabled: false, panel: null, tab: 'discover', searchTimer: null, lastSearch: '', types: null };
+
+    // The panel's tabs. A tab with a media type shows only when Bragi has a
+    // library for it (Shows always shows).
+    var TABS = [
+        { id: 'discover', label: 'Shows', search: 'Search for a show' },
+        { id: 'movies', label: 'Movies', type: 'movie', search: 'Search for a movie' },
+        { id: 'music', label: 'Music', type: 'music', search: 'Search for an artist or an album' },
+        { id: 'ebooks', label: 'Ebooks', type: 'book', search: 'Search for a book or an author' },
+        { id: 'audiobooks', label: 'Audiobooks', type: 'audiobook', search: 'Search for a book or an author' },
+        { id: 'mine', label: 'My requests' }
+    ];
+
+    var TYPE_NAMES = { tv: 'Show', movie: 'Movie', music: 'Music', book: 'Ebook', audiobook: 'Audiobook' };
 
     // ---- helpers ----
 
@@ -216,27 +230,41 @@
                 onclick: function () { state.tab = id; render(); }
             }, [el('span', { text: label })]);
         }
-        tabs.appendChild(tabButton('discover', 'Shows'));
-        tabs.appendChild(tabButton('music', 'Music'));
-        tabs.appendChild(tabButton('mine', 'My requests'));
+        function addTabs() {
+            tabs.textContent = '';
+            TABS.forEach(function (t) {
+                if (t.type && state.types && state.types.indexOf(t.type) < 0) return;
+                tabs.appendChild(tabButton(t.id, t.label));
+            });
+            if (!tabs.querySelector('[data-tab="' + state.tab + '"]')) state.tab = 'discover';
+        }
+        addTabs();
 
         function render() {
-            Array.prototype.forEach.call(tabs.children, function (b) { b.classList.toggle('bragi-tab-active', b.getAttribute('data-tab') === state.tab); });
+            var tab = TABS.filter(function (t) { return t.id === state.tab; })[0] || TABS[0];
+            Array.prototype.forEach.call(tabs.children, function (b) {
+                var on = b.getAttribute('data-tab') === state.tab;
+                b.classList.toggle('bragi-tab-active', on);
+                if (on && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            });
             search.classList.toggle('bragi-hidden', state.tab === 'mine');
-            var word = state.tab === 'music' ? 'Search for an artist or an album' : 'Search for a show';
-            search.placeholder = word;
-            search.setAttribute('aria-label', word);
+            search.placeholder = tab.search || '';
+            search.setAttribute('aria-label', tab.search || 'Search');
             content.textContent = '';
+            var q = search.value.trim();
             if (state.tab === 'mine') renderMine(content);
-            else if (state.tab === 'music') renderMusic(content, search.value.trim());
-            else renderDiscover(content, search.value.trim());
+            else if (state.tab === 'movies') renderMovies(content, q);
+            else if (state.tab === 'music') renderMusic(content, q);
+            else if (state.tab === 'ebooks') renderBooks(content, q, 'book');
+            else if (state.tab === 'audiobooks') renderBooks(content, q, 'audiobook');
+            else renderDiscover(content, q);
         }
         search.addEventListener('input', function () {
             clearTimeout(state.searchTimer);
             state.searchTimer = setTimeout(render, 350);
         });
 
-        var panel = el('div', { class: 'bragi-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Request shows' }, [
+        var panel = el('div', { class: 'bragi-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Request' }, [
             el('div', { class: 'bragi-panel-head' }, [
                 el('h2', { text: 'Request' }),
                 tabs,
@@ -250,7 +278,16 @@
         document.body.classList.add('bragi-open');
         state.panel = panel;
         render();
-        if (state.tab === 'discover') search.focus();
+        if (state.tab !== 'mine') search.focus();
+        if (!state.types) {
+            api('GET', 'MediaTypes').then(function (types) {
+                if (state.panel !== panel || !Array.isArray(types)) return;
+                state.types = types;
+                var before = state.tab;
+                addTabs();
+                if (state.tab !== before) render();
+            }).catch(function () { /* older Bragi: keep every tab */ });
+        }
     }
 
     function closePanel() {
@@ -283,6 +320,66 @@
         }).catch(function (err) { failed(box, err); });
     }
 
+    // ---- movies ----
+
+    // pickStatus is the badge for a movie or book: an open request first,
+    // then "In library" when Bragi already tracks it.
+    function pickStatus(requested, inLibrary) {
+        if (requested === 'available') return { label: 'Available', cls: 'bragi-ok' };
+        if (requested === 'approved') return { label: 'Requested', cls: 'bragi-busy' };
+        if (requested === 'pending') return { label: 'Waiting for approval', cls: 'bragi-wait' };
+        if (inLibrary) return { label: 'In library', cls: 'bragi-ok' };
+        return null;
+    }
+
+    function movieSub(m) {
+        var today = new Date().toISOString().slice(0, 10);
+        if (m.inCinemas && m.inCinemas > today) return 'In cinemas ' + m.inCinemas;
+        return m.year ? String(m.year) : '';
+    }
+
+    function renderMovies(box, q) {
+        loading(box);
+        var again = function () { renderMovies(box, q); };
+        var call = q ? api('GET', 'Movies/Search?query=' + encodeURIComponent(q)) : api('GET', 'Movies/Trending');
+        call.then(function (movies) {
+            box.textContent = '';
+            box.appendChild(el('h3', { class: 'bragi-section-title', text: q ? 'Results for “' + q + '”' : 'Trending this week' }));
+            if (!movies.length) {
+                box.appendChild(el('div', { class: 'bragi-muted', text: q ? 'No movies found.' : 'Search for a movie.' }));
+                return;
+            }
+            var g = el('div', { class: 'bragi-grid' });
+            movies.forEach(function (m) {
+                g.appendChild(mediaCard(m.title, movieSub(m), m.posterUrl, '', pickStatus(m.requested, m.movieId),
+                    { type: 'movie', tmdbId: m.tmdbId }, 'Request', again));
+            });
+            box.appendChild(g);
+        }).catch(function (err) { failed(box, err); });
+    }
+
+    // ---- ebooks and audiobooks ----
+
+    function renderBooks(box, q, type) {
+        loading(box);
+        var again = function () { renderBooks(box, q, type); };
+        var call = q ? api('GET', 'Books/Search?type=' + type + '&query=' + encodeURIComponent(q)) : api('GET', 'Books/Trending?type=' + type);
+        call.then(function (list) {
+            box.textContent = '';
+            box.appendChild(el('h3', { class: 'bragi-section-title', text: q ? 'Results for “' + q + '”' : 'Popular books this week' }));
+            if (!list.length) {
+                box.appendChild(el('div', { class: 'bragi-muted', text: q ? 'No books found. Try the title and the author.' : 'Search for a book or an author.' }));
+                return;
+            }
+            var g = el('div', { class: 'bragi-grid' });
+            list.forEach(function (b) {
+                g.appendChild(mediaCard(b.title, [b.author, b.year].filter(Boolean).join(' · '), b.coverUrl, '', pickStatus(b.requested, b.itemId),
+                    { type: type, bookId: b.bookId }, 'Request', again));
+            });
+            box.appendChild(g);
+        }).catch(function (err) { failed(box, err); });
+    }
+
     // ---- music ----
 
     function musicStatus(x) {
@@ -294,9 +391,11 @@
         return null;
     }
 
-    function musicCard(title, sub, image, round, x, body, label, onDone) {
-        var st = musicStatus(x);
-        var pic = el('div', { class: 'bragi-poster bragi-square' + (round ? ' bragi-round' : '') });
+    // mediaCard is a card with a one-click Request button (or a status
+    // badge): movies, books and music. shape is '' (poster), 'square' or
+    // 'round'.
+    function mediaCard(title, sub, image, shape, st, body, label, onDone) {
+        var pic = el('div', { class: 'bragi-poster' + (shape ? ' bragi-square' : '') + (shape === 'round' ? ' bragi-round' : '') });
         if (image) pic.appendChild(el('img', { src: image, alt: '', loading: 'lazy' }));
         else pic.appendChild(el('span', { class: 'bragi-poster-fallback', text: title }));
         var action;
@@ -311,7 +410,10 @@
                     api('POST', 'Requests', body).then(function (rq) {
                         toast(rq.status === 'pending' ? title + ' is requested. An admin will approve it.' : title + ' is added.');
                         onDone();
-                    }).catch(function (err) { action.disabled = false; toast(err.message); });
+                    }).catch(function (err) {
+                        action.disabled = false;
+                        toast(err.status === 409 ? 'You already asked for ' + title + '.' : err.message);
+                    });
                 }
             }, [el('span', { text: label })]);
         }
@@ -325,7 +427,7 @@
     function albumGrid(albums, onDone) {
         var g = el('div', { class: 'bragi-grid' });
         albums.forEach(function (a) {
-            g.appendChild(musicCard(a.title, [a.artist, a.year].filter(Boolean).join(' · '), a.coverUrl, false, a,
+            g.appendChild(mediaCard(a.title, [a.artist, a.year].filter(Boolean).join(' · '), a.coverUrl, 'square', musicStatus(a),
                 { type: 'music', albumId: a.albumId }, 'Request', onDone));
         });
         return g;
@@ -356,7 +458,7 @@
                 box.appendChild(el('h3', { class: 'bragi-section-title', text: 'Artists' }));
                 var g = el('div', { class: 'bragi-grid' });
                 r.artists.forEach(function (a) {
-                    g.appendChild(musicCard(a.name, a.disambiguation || a.country || '', a.imageUrl, true, a,
+                    g.appendChild(mediaCard(a.name, a.disambiguation || a.country || '', a.imageUrl, 'round', musicStatus(a),
                         { type: 'music', artistId: a.artistId, monitor: 'all' }, 'Follow', again));
                 });
                 box.appendChild(g);
@@ -373,14 +475,14 @@
         api('GET', 'Requests').then(function (list) {
             box.textContent = '';
             if (!list.length) {
-                box.appendChild(el('div', { class: 'bragi-muted', text: 'You have not requested anything yet. Find a show or some music above.' }));
+                box.appendChild(el('div', { class: 'bragi-muted', text: 'You have not requested anything yet. Pick a tab above to find something.' }));
                 return;
             }
             var rows = el('div', { class: 'bragi-rows' });
             list.forEach(function (rq) {
                 var st = requestLabel(rq);
                 var detail = '';
-                if (rq.progress && rq.progress.episodes) {
+                if (rq.progress && rq.progress.episodes && (rq.type === 'tv' || rq.type === 'music')) {
                     var unit = rq.type !== 'music' ? 'episodes' : rq.music && rq.music.kind === 'album' ? 'tracks' : 'albums';
                     detail = rq.progress.imported + ' of ' + rq.progress.episodes + ' ' + unit + ' ready';
                 }
@@ -396,7 +498,10 @@
                 rows.appendChild(el('div', { class: 'bragi-row' }, [
                     rq.posterUrl ? el('img', { src: rq.posterUrl, alt: '' }) : el('div', { class: 'bragi-row-noimg' }),
                     el('div', { class: 'bragi-row-main' }, [
-                        el('div', { class: 'bragi-card-title', text: rq.title + (rq.year ? ' (' + rq.year + ')' : '') }),
+                        el('div', { class: 'bragi-card-title' }, [
+                            el('span', { text: rq.title + (rq.year ? ' (' + rq.year + ')' : '') }),
+                            TYPE_NAMES[rq.type] ? el('span', { class: 'bragi-kind', text: TYPE_NAMES[rq.type] }) : null
+                        ]),
                         el('div', { class: 'bragi-muted', text: detail || (rq.reason || '') }),
                         detail && rq.reason ? el('div', { class: 'bragi-muted', text: rq.reason }) : null
                     ]),
@@ -430,7 +535,7 @@
     function headerButton() {
         return el('button', {
             is: 'paper-icon-button-light', type: 'button', class: 'headerButton headerButtonRight bragi-header-btn paper-icon-button-light',
-            title: 'Request shows', 'aria-label': 'Request shows', onclick: function () { openPanel('discover'); }
+            title: 'Request', 'aria-label': 'Request', onclick: function () { openPanel('discover'); }
         }, [icon('request')]);
     }
 
