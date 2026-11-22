@@ -39,6 +39,16 @@ public class BragiController : ControllerBase
     public Task<IActionResult> Trending([FromQuery] int page, CancellationToken ct)
         => Proxy(HttpMethod.Get, "/api/v1/discover/trending?type=tv&page=" + Math.Max(page, 1), null, ct);
 
+    /// <summary>Searches MusicBrainz through Bragi: {"artists": [...], "albums": [...]}.</summary>
+    [HttpGet("Music/Search")]
+    public Task<IActionResult> SearchMusic([FromQuery] string query, CancellationToken ct)
+        => Proxy(HttpMethod.Get, "/api/v1/discover/search?type=music&q=" + Uri.EscapeDataString(query ?? string.Empty), null, ct);
+
+    /// <summary>This week's popular albums.</summary>
+    [HttpGet("Music/Trending")]
+    public Task<IActionResult> TrendingMusic(CancellationToken ct)
+        => Proxy(HttpMethod.Get, "/api/v1/discover/trending?type=music", null, ct);
+
     /// <summary>One show's seasons, for the season picker.</summary>
     [HttpGet("Shows/{tmdbId:int}")]
     public Task<IActionResult> Show([FromRoute] int tmdbId, CancellationToken ct)
@@ -49,7 +59,7 @@ public class BragiController : ControllerBase
     public Task<IActionResult> MyRequests(CancellationToken ct)
         => Proxy(HttpMethod.Get, "/api/v1/requests?mine=true", null, ct);
 
-    /// <summary>Requests a show: {"type":"tv","tmdbId":1,"seasons":"all"}.</summary>
+    /// <summary>Requests a show ({"type":"tv","tmdbId":1,"seasons":"all"}), an album ({"type":"music","albumId":"..."}) or an artist ({"type":"music","artistId":"...","monitor":"all"}).</summary>
     [HttpPost("Requests")]
     public Task<IActionResult> CreateRequest([FromBody] JsonElement body, CancellationToken ct)
         => Proxy(HttpMethod.Post, "/api/v1/requests", body.GetRawText(), ct);

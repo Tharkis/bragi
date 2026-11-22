@@ -15,6 +15,7 @@ import (
 	"github.com/Tharkis/bragi/internal/books"
 	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/movies"
+	"github.com/Tharkis/bragi/internal/music"
 	"github.com/Tharkis/bragi/internal/scan"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
@@ -31,6 +32,7 @@ type Server struct {
 	tv      *tv.Service
 	books   *books.Service
 	movies  *movies.Service
+	music   *music.Service
 	events  *events.Hub
 	scans   *scan.Manager
 }
@@ -51,6 +53,8 @@ type Options struct {
 	Books *books.Service
 	// Movies runs the movie pipeline. Nil builds one that is not scheduled.
 	Movies *movies.Service
+	// Music runs the music pipeline. Nil builds one that is not scheduled.
+	Music *music.Service
 	// Events carries live status changes to /api/v1/events.
 	Events *events.Hub
 	// Scans runs library scans. Nil builds one that runs scans but not the
@@ -79,12 +83,15 @@ func New(o Options) http.Handler {
 	if o.Books == nil {
 		o.Books = books.New(o.Store, o.HTTPClient, o.Logger, o.Events)
 	}
+	if o.Music == nil {
+		o.Music = music.New(o.Store, o.HTTPClient, o.Logger, o.Events)
+	}
 	if o.Scans == nil {
-		o.Scans = NewScanManager(o.Store, o.Logger, o.Events, o.TV, o.Movies, o.Books)
+		o.Scans = NewScanManager(o.Store, o.Logger, o.Events, o.TV, o.Movies, o.Books, o.Music)
 		go o.Scans.Run(context.Background())
 	}
 	s := &Server{store: o.Store, log: o.Logger, version: o.Version, hc: o.HTTPClient, ui: o.UI, mux: http.NewServeMux(),
-		tv: o.TV, movies: o.Movies, books: o.Books, events: o.Events, scans: o.Scans}
+		tv: o.TV, movies: o.Movies, books: o.Books, music: o.Music, events: o.Events, scans: o.Scans}
 	s.routes()
 	return s.withUser(s.logRequests(s.mux))
 }
@@ -178,6 +185,21 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /api/v1/movies/{id}/monitor", s.requireAdmin(s.handleMonitorMovie))
 	m.HandleFunc("GET /api/v1/movies/{id}/releases", s.requireAdmin(s.handleMovieReleases))
 	m.HandleFunc("POST /api/v1/movies/{id}/grab", s.requireAdmin(s.handleGrabMovie))
+	m.HandleFunc("GET /api/v1/discover/artist/{id}", s.requireUser(s.handleDiscoverArtist))
+	m.HandleFunc("GET /api/v1/discover/album/{id}", s.requireUser(s.handleDiscoverAlbum))
+	m.HandleFunc("GET /api/v1/artists", s.requireUser(s.handleListArtists))
+	m.HandleFunc("GET /api/v1/artists/{id}", s.requireUser(s.handleGetArtist))
+	m.HandleFunc("DELETE /api/v1/artists/{id}", s.requireAdmin(s.handleDeleteArtist))
+	m.HandleFunc("POST /api/v1/artists/{id}/refresh", s.requireAdmin(s.handleRefreshArtist))
+	m.HandleFunc("POST /api/v1/artists/{id}/search", s.requireAdmin(s.handleSearchArtist))
+	m.HandleFunc("PUT /api/v1/artists/{id}/monitor", s.requireAdmin(s.handleMonitorArtist))
+	m.HandleFunc("GET /api/v1/albums/{id}", s.requireUser(s.handleGetAlbum))
+	m.HandleFunc("PUT /api/v1/albums/{id}/monitor", s.requireAdmin(s.handleMonitorAlbum))
+	m.HandleFunc("POST /api/v1/albums/{id}/search", s.requireAdmin(s.handleSearchAlbum))
+	m.HandleFunc("GET /api/v1/albums/{id}/releases", s.requireAdmin(s.handleAlbumReleases))
+	m.HandleFunc("POST /api/v1/albums/{id}/grab", s.requireAdmin(s.handleGrabAlbum))
+	m.HandleFunc("POST /api/v1/activity/queue/{id}/import", s.requireAdmin(s.handleImportAnyway))
+	m.HandleFunc("POST /api/v1/settings/test/navidrome", s.requireAdmin(s.handleTestNavidrome))
 	m.HandleFunc("GET /api/v1/activity/queue", s.requireUser(s.handleQueue))
 	m.HandleFunc("GET /api/v1/activity/history", s.requireUser(s.handleHistory))
 	m.HandleFunc("DELETE /api/v1/activity/queue/{id}", s.requireAdmin(s.handleRemoveDownload))

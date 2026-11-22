@@ -224,6 +224,9 @@ type slskTransfer struct {
 }
 
 func (s *Slskd) peers(text string) []map[string]any {
+	if music := musicPeers(text); music != nil {
+		return music
+	}
 	b := bookForQuery(text)
 	if b == nil {
 		return []map[string]any{}
@@ -258,7 +261,11 @@ func (s *Slskd) progress(t *slskTransfer) float64 {
 		parts := strings.Split(t.filename, `\`)
 		dir := filepath.Join(s.Dir, parts[len(parts)-2])
 		os.MkdirAll(dir, 0o755)
-		os.WriteFile(filepath.Join(dir, parts[len(parts)-1]), []byte("fake "+parts[len(parts)-1]), 0o644)
+		body := []byte("fake " + parts[len(parts)-1])
+		if strings.HasSuffix(t.filename, ".flac") {
+			body = FakeFLAC()
+		}
+		os.WriteFile(filepath.Join(dir, parts[len(parts)-1]), body, 0o644)
 	}
 	return 1
 }

@@ -29,7 +29,7 @@
 
   onMount(() => {
     load()
-    return onEvents(['request', 'download', 'episodes', 'movie', 'book'], load)
+    return onEvents(['request', 'download', 'episodes', 'movie', 'book', 'album', 'artist'], load)
   })
 
   const pending = $derived(requests.filter((r) => r.status === 'pending'))
@@ -58,7 +58,20 @@
     }
   }
 
-  const itemLink = (r) => (r.type === 'movie' ? `/movies/${r.progress.movieId}` : itemPath(r.type, r.progress.seriesId))
+  function itemLink(r) {
+    if (r.type === 'movie') return `/movies/${r.progress.movieId}`
+    if (r.type === 'music') return r.progress.albumId ? `/albums/${r.progress.albumId}` : `/artists/${r.progress.artistId}`
+    return itemPath(r.type, r.progress.seriesId)
+  }
+
+  // musicLabel says what a music request asks for.
+  function musicLabel(r) {
+    const m = r.music ?? {}
+    if (m.kind === 'album') return `Album${r.author ? ' by ' + r.author : ''}`
+    if (m.monitor === 'future') return 'Artist, new releases'
+    if (m.albums?.length) return `Artist, ${m.albums.length} ${m.albums.length === 1 ? 'album' : 'albums'}`
+    return 'Artist, all albums'
+  }
 
   function movieProgress(p) {
     if (p.imported) return 'In the library'
@@ -103,7 +116,7 @@
   {#each shown as r (r.id)}
     {@const [label, tone] = requestStates[r.status] ?? [r.status, '']}
     <div class="card req">
-      <Poster url={r.posterUrl} title={r.title} />
+      <Poster url={r.posterUrl} title={r.title} square={r.type === 'music'} />
       <div class="body">
         <div class="spread">
           <div>
@@ -112,7 +125,7 @@
               {#if r.year}<span class="muted">({r.year})</span>{/if}
             </div>
             <div class="muted small">
-              {isBook(r.type) ? `${bookTypes[r.type]}${r.author ? ' by ' + r.author : ''}` : scopeLabel(r.seasons, r.type)} · {admin ? `${r.username}, ` : ''}{when(r.createdAt)}
+              {r.type === 'music' ? musicLabel(r) : isBook(r.type) ? `${bookTypes[r.type]}${r.author ? ' by ' + r.author : ''}` : scopeLabel(r.seasons, r.type)} · {admin ? `${r.username}, ` : ''}{when(r.createdAt)}
             </div>
           </div>
           <Badge {label} {tone} />
@@ -130,7 +143,7 @@
           <div class="progress">
             <div class="bar" class:good={r.status === 'available'}><div style="width: {pct(r.progress)}%"></div></div>
             <div class="muted small">
-              {r.progress.imported} of {r.progress.episodes} episodes
+              {r.progress.imported} of {r.progress.episodes} {r.type !== 'music' ? 'episodes' : r.music?.kind === 'album' ? 'tracks' : 'albums'}
               {#if r.progress.downloading}· {r.progress.downloading} downloading{/if}
             </div>
           </div>

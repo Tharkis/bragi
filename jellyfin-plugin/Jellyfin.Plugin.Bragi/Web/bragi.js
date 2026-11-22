@@ -216,14 +216,19 @@
                 onclick: function () { state.tab = id; render(); }
             }, [el('span', { text: label })]);
         }
-        tabs.appendChild(tabButton('discover', 'Discover'));
+        tabs.appendChild(tabButton('discover', 'Shows'));
+        tabs.appendChild(tabButton('music', 'Music'));
         tabs.appendChild(tabButton('mine', 'My requests'));
 
         function render() {
             Array.prototype.forEach.call(tabs.children, function (b) { b.classList.toggle('bragi-tab-active', b.getAttribute('data-tab') === state.tab); });
-            search.classList.toggle('bragi-hidden', state.tab !== 'discover');
+            search.classList.toggle('bragi-hidden', state.tab === 'mine');
+            var word = state.tab === 'music' ? 'Search for an artist or an album' : 'Search for a show';
+            search.placeholder = word;
+            search.setAttribute('aria-label', word);
             content.textContent = '';
             if (state.tab === 'mine') renderMine(content);
+            else if (state.tab === 'music') renderMusic(content, search.value.trim());
             else renderDiscover(content, search.value.trim());
         }
         search.addEventListener('input', function () {
@@ -278,12 +283,97 @@
         }).catch(function (err) { failed(box, err); });
     }
 
+    // ---- music ----
+
+    function musicStatus(x) {
+        if (x.itemId && (x.status === 'imported' || x.status === 'upgrade_wanted')) return { label: 'In library', cls: 'bragi-ok' };
+        if (x.itemId && x.artistId && x.name) return { label: 'Following', cls: 'bragi-ok' };
+        if (x.requested === 'available') return { label: 'Available', cls: 'bragi-ok' };
+        if (x.requested === 'approved' || (x.itemId && x.monitored)) return { label: 'Requested', cls: 'bragi-busy' };
+        if (x.requested === 'pending') return { label: 'Waiting for approval', cls: 'bragi-wait' };
+        return null;
+    }
+
+    function musicCard(title, sub, image, round, x, body, label, onDone) {
+        var st = musicStatus(x);
+        var pic = el('div', { class: 'bragi-poster bragi-square' + (round ? ' bragi-round' : '') });
+        if (image) pic.appendChild(el('img', { src: image, alt: '', loading: 'lazy' }));
+        else pic.appendChild(el('span', { class: 'bragi-poster-fallback', text: title }));
+        var action;
+        if (st) {
+            action = el('span', { class: 'bragi-badge ' + st.cls, text: st.label });
+        } else {
+            action = el('button', {
+                is: 'emby-button', type: 'button', class: 'bragi-request-btn raised button-submit',
+                onclick: function (e) {
+                    e.stopPropagation();
+                    action.disabled = true;
+                    api('POST', 'Requests', body).then(function (rq) {
+                        toast(rq.status === 'pending' ? title + ' is requested. An admin will approve it.' : title + ' is added.');
+                        onDone();
+                    }).catch(function (err) { action.disabled = false; toast(err.message); });
+                }
+            }, [el('span', { text: label })]);
+        }
+        return el('div', { class: 'bragi-card' }, [pic, el('div', { class: 'bragi-card-body' }, [
+            el('div', { class: 'bragi-card-title', text: title }),
+            el('div', { class: 'bragi-card-year', text: sub }),
+            action
+        ])]);
+    }
+
+    function albumGrid(albums, onDone) {
+        var g = el('div', { class: 'bragi-grid' });
+        albums.forEach(function (a) {
+            g.appendChild(musicCard(a.title, [a.artist, a.year].filter(Boolean).join(' · '), a.coverUrl, false, a,
+                { type: 'music', albumId: a.albumId }, 'Request', onDone));
+        });
+        return g;
+    }
+
+    function renderMusic(box, q) {
+        loading(box);
+        var again = function () { renderMusic(box, q); };
+        if (!q) {
+            api('GET', 'Music/Trending').then(function (albums) {
+                box.textContent = '';
+                box.appendChild(el('h3', { class: 'bragi-section-title', text: 'Popular albums this week' }));
+                if (!albums.length) {
+                    box.appendChild(el('div', { class: 'bragi-muted', text: 'Search for an artist or an album.' }));
+                    return;
+                }
+                box.appendChild(albumGrid(albums, again));
+            }).catch(function (err) { failed(box, err); });
+            return;
+        }
+        api('GET', 'Music/Search?query=' + encodeURIComponent(q)).then(function (r) {
+            box.textContent = '';
+            if (!r.artists.length && !r.albums.length) {
+                box.appendChild(el('div', { class: 'bragi-muted', text: 'Nothing found. Try “Artist - Album” for one album.' }));
+                return;
+            }
+            if (r.artists.length) {
+                box.appendChild(el('h3', { class: 'bragi-section-title', text: 'Artists' }));
+                var g = el('div', { class: 'bragi-grid' });
+                r.artists.forEach(function (a) {
+                    g.appendChild(musicCard(a.name, a.disambiguation || a.country || '', a.imageUrl, true, a,
+                        { type: 'music', artistId: a.artistId, monitor: 'all' }, 'Follow', again));
+                });
+                box.appendChild(g);
+            }
+            if (r.albums.length) {
+                box.appendChild(el('h3', { class: 'bragi-section-title', text: 'Albums' }));
+                box.appendChild(albumGrid(r.albums, again));
+            }
+        }).catch(function (err) { failed(box, err); });
+    }
+
     function renderMine(box) {
         loading(box);
         api('GET', 'Requests').then(function (list) {
             box.textContent = '';
             if (!list.length) {
-                box.appendChild(el('div', { class: 'bragi-muted', text: 'You have not requested anything yet. Find a show under Discover.' }));
+                box.appendChild(el('div', { class: 'bragi-muted', text: 'You have not requested anything yet. Find a show or some music above.' }));
                 return;
             }
             var rows = el('div', { class: 'bragi-rows' });
@@ -291,7 +381,8 @@
                 var st = requestLabel(rq);
                 var detail = '';
                 if (rq.progress && rq.progress.episodes) {
-                    detail = rq.progress.imported + ' of ' + rq.progress.episodes + ' episodes ready';
+                    var unit = rq.type !== 'music' ? 'episodes' : rq.music && rq.music.kind === 'album' ? 'tracks' : 'albums';
+                    detail = rq.progress.imported + ' of ' + rq.progress.episodes + ' ' + unit + ' ready';
                 }
                 var cancel = null;
                 if (rq.status === 'pending') {

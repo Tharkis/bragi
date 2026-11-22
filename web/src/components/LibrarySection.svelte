@@ -11,17 +11,19 @@
   // Suggest the usual folder for the type until the path is edited.
   function pickType(t) {
     if (Object.values(defaultPaths).includes(draft.path)) draft.path = defaultPaths[t]
+    if (usesPreset(t) && !presetsFor(t).some((p) => p.id === draft.qualityPresetId)) draft.qualityPresetId = presetsFor(t)[0]?.id ?? null
   }
   let error = $state('')
 
   const types = { tv: 'TV', movie: 'Movies', music: 'Music', book: 'Books', audiobook: 'Audiobooks' }
-  // Quality presets are about video; books rank by file format instead.
-  const usesPreset = (t) => t === 'tv' || t === 'movie'
+  // Video and music have quality presets; books rank by file format instead.
+  const usesPreset = (t) => t === 'tv' || t === 'movie' || t === 'music'
+  const presetsFor = (t) => presets.filter((p) => (p.mediaType || 'video') === (t === 'music' ? 'music' : 'video'))
 
   async function load() {
     try {
       ;[libraries, presets] = await Promise.all([get('/libraries'), get('/qualitypresets')])
-      if (draft.qualityPresetId === null && presets.length) draft.qualityPresetId = presets[0].id
+      if (draft.qualityPresetId === null) draft.qualityPresetId = presetsFor(draft.mediaType)[0]?.id ?? null
     } catch (e) {
       error = e.message
     }
@@ -66,7 +68,7 @@
   }
   const runningType = $derived(scans && Object.values(scans.types).find((t) => t.running))
 
-  const presetName = (id) => presets.find((p) => p.id === id)?.name ?? 'None'
+  const presetName = (id, t) => presets.find((p) => p.id === id)?.name ?? (t === 'music' ? 'Lossless first' : 'None')
 
   async function add(event) {
     event.preventDefault()
@@ -108,7 +110,6 @@
       <select bind:value={draft.mediaType} onchange={(e) => pickType(e.currentTarget.value)}>
         {#each Object.entries(types) as [id, name] (id)}<option value={id}>{name}</option>{/each}
       </select>
-      <small>TV, Movies, Books and Audiobooks are managed in this version; music is saved for later.</small>
     </label>
     <label><span>Folder</span><input bind:value={draft.path} required /></label>
     <label><span>Name (optional)</span><input bind:value={draft.name} placeholder="Taken from the folder name" /></label>
@@ -116,7 +117,7 @@
       <label>
         <span>Quality preset</span>
         <select bind:value={draft.qualityPresetId}>
-          {#each presets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+          {#each presetsFor(draft.mediaType) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
         </select>
       </label>
     {:else if draft.mediaType === 'book' || draft.mediaType === 'audiobook'}
@@ -140,7 +141,7 @@
           <tr>
             <td><div>{lib.name}</div><div class="muted small">{lib.path}</div></td>
             <td>{types[lib.mediaType]}</td>
-            <td>{usesPreset(lib.mediaType) ? presetName(lib.qualityPresetId) : lib.mediaType === 'audiobook' ? 'M4B first' : lib.mediaType === 'book' ? 'EPUB first' : '—'}</td>
+            <td>{usesPreset(lib.mediaType) ? presetName(lib.qualityPresetId, lib.mediaType) : lib.mediaType === 'audiobook' ? 'M4B first' : lib.mediaType === 'book' ? 'EPUB first' : '—'}</td>
             <td class="actions"><button class="danger" onclick={() => remove(lib)}>Remove</button></td>
           </tr>
         {/each}

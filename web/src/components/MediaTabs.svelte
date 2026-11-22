@@ -9,6 +9,7 @@
     { type: 'movie', label: 'Movies', path: '/movies' },
     { type: 'book', label: 'Books', path: '/books' },
     { type: 'audiobook', label: 'Audiobooks', path: '/audiobooks' },
+    { type: 'music', label: 'Music', path: '/music' },
   ]
 </script>
 

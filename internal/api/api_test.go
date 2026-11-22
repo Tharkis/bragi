@@ -208,8 +208,9 @@ func TestLibraries(t *testing.T) {
 
 	var presets []store.QualityPreset
 	c.do("GET", "/api/v1/qualitypresets", nil, &presets)
-	if len(presets) != 3 {
-		t.Fatalf("presets: %d, want 3", len(presets))
+	// Three for video, two for music.
+	if len(presets) != 5 || presets[0].MediaType != "video" || presets[4].MediaType != "music" {
+		t.Fatalf("presets: %+v", presets)
 	}
 }
 

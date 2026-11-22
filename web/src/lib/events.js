@@ -7,7 +7,7 @@ const listeners = new Set()
 function connect() {
   if (source) return
   source = new EventSource('/api/v1/events', { withCredentials: true })
-  for (const type of ['request', 'series', 'episodes', 'movie', 'download', 'scan', 'book']) {
+  for (const type of ['request', 'series', 'episodes', 'movie', 'download', 'scan', 'book', 'artist', 'album']) {
     source.addEventListener(type, (e) => {
       let data = null
       try {

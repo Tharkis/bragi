@@ -209,6 +209,10 @@ func Prowlarr(base func() string) http.Handler {
 	})
 	m.HandleFunc("/api/v1/search", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("query")
+		if slices.Contains(r.URL.Query()["categories"], "3000") {
+			writeJSON(w, musicReleases(q, base()))
+			return
+		}
 		if cats := r.URL.Query()["categories"]; len(cats) > 0 && (strings.HasPrefix(cats[0], "70") || strings.HasPrefix(cats[0], "30")) {
 			writeJSON(w, bookReleases(q, cats, base()))
 			return
@@ -350,7 +354,11 @@ func (d *Downloader) progress(j *job) float64 {
 		j.done = true
 		dir := filepath.Join(d.Dir, j.sub, j.name)
 		os.MkdirAll(dir, 0o755)
-		if files := bookFiles(j.name); files != nil {
+		if files := musicFiles(j.name); files != nil {
+			for name, body := range files {
+				os.WriteFile(filepath.Join(dir, name), body, 0o644)
+			}
+		} else if files := bookFiles(j.name); files != nil {
 			for name, body := range files {
 				os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
 				os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)

@@ -62,9 +62,25 @@ export function bookState(b) {
   return ['Wanted', 'warn']
 }
 
-// itemPath links to the page of a show, movie or book.
+// albumState returns [label, tone] for an album.
+export function albumState(a) {
+  if (a.status === 'imported') return ['In library', 'good']
+  if (a.status === 'upgrade_wanted') return ['Upgrade wanted', 'good']
+  if (a.status === 'downloading' || a.downloading) return ['Downloading', 'accent']
+  if (a.status === 'searching') return ['Searching', 'accent']
+  if (a.releaseDate && a.releaseDate > today()) return ['Not out yet', '']
+  if (!a.monitored) return ['Not monitored', '']
+  if (a.importedTracks > 0) return [`${a.importedTracks} of ${a.tracks} tracks`, 'warn']
+  return ['Wanted', 'warn']
+}
+
+// The album types MusicBrainz uses, in the order Bragi shows them.
+export const albumTypes = ['Album', 'EP', 'Single', 'Live', 'Compilation', 'Other']
+
+// itemPath links to the page of a show, movie, book or artist.
 export function itemPath(type, id) {
   if (type === 'movie') return `/movies/${id}`
+  if (type === 'music') return `/artists/${id}`
   if (isBook(type)) return `/books/${id}`
   return `/library/${id}`
 }

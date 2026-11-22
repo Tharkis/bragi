@@ -2,18 +2,28 @@
 
 Bragi is one app for your media collection. Request a show, and Bragi finds it through your indexers, sends it to your download client, and files it into your library. It replaces a stack of *arr apps with one container, one database and one settings page.
 
-**Status:** early. TV, movies, ebooks and audiobooks work end to end: request something, Bragi searches your indexers, sends the best release to your download client, then renames it into your library and tells Jellyfin. Music comes later.
+**Status:** early. TV, movies, ebooks, audiobooks and music work end to end: request something, Bragi searches your indexers (and Soulseek), sends the best release to your download client, then renames it into your library and tells Jellyfin or Navidrome.
 
 | | Now | Later |
 | --- | --- | --- |
 | Indexers | Prowlarr, Jackett, any Newznab / Torznab URL | |
 | Download clients | NZBGet, SABnzbd, qBittorrent, Transmission, Deluge, slskd (Soulseek) | |
-| Media | TV, movies, ebooks, audiobooks | Music |
+| Media | TV, movies, ebooks, audiobooks, music | |
 | Requests | Web UI, REST API, [Jellyfin plugin](jellyfin-plugin/README.md), Jellyseerr-compatible API | |
+
+### Music
+
+Music works like Lidarr: follow an artist (every album, only new releases, or albums you pick) or request one album. Details come from [MusicBrainz](https://musicbrainz.org), covers from the Cover Art Archive.
+
+- **Soulseek first.** With slskd set up, Bragi searches Soulseek first and asks your indexers only when nothing there fits. Folders missing tracks or holding several albums are skipped.
+- **Quality.** Music libraries use the *Lossless first* preset (FLAC, then MP3 320, V0, 256, AAC 256) or *MP3 320*. Bragi keeps looking for a better copy until an album reaches the top of its list; turn that off under Settings, Music.
+- **Album types.** Following an artist wants albums, EPs and singles; add live albums or compilations under Settings, Music.
+- **Import.** Files are matched to the album's tracks, tagged (MP3 and FLAC, including MusicBrainz ids) and filed as `Artist/Album (Year)/01 - Title.flac`, with `Disc 1`/`Disc 2` folders for multi-disc albums and a `cover.jpg`. When the match is unsure, for example tracks are missing, the download waits on the Activity page with **Import anyway**.
+- **Navidrome.** Enter its URL and an admin user under Settings, Music, and Bragi starts a Navidrome scan after each import.
 
 ### Download client tips
 
-- **Categories.** Set one category, or a different one per media type under *More options* (e.g. `tv`, `movies`, `books`, `audiobooks`). The Test button warns when NZBGet has no such category.
+- **Categories.** Set one category, or a different one per media type under *More options* (e.g. `tv`, `movies`, `books`, `audiobooks`, `music`). The Test button warns when NZBGet has no such category.
 - **Path mapping.** If the client runs in its own container and sees its downloads as `/downloads` while Bragi sees `/data/usenet`, enter both under *More options*. Mapping the same `/data` share into every container avoids this and lets Bragi hardlink.
 - **NZBGet** needs version 16 or newer and its control or restricted login; the add-only login cannot see the queue. Bragi treats damaged, password-protected or unpacking-failed downloads as failed, blocklists the release and grabs another.
 - **Transmission** (2.80 or newer) has no categories, so Bragi saves each download in a subfolder of Transmission's download folder named after the category (e.g. `/downloads/complete/movies`), and labels it on Transmission 4. Enter the URL as `http://host:9091`; Bragi adds `/transmission/rpc`. If Test says Transmission refused the address, add Bragi's IP to `rpc-whitelist`.
@@ -77,10 +87,11 @@ Bragi snapshots its database to `/config/backups` once a day and keeps seven.
 
 ## Importing what you already have
 
-Each Library tab has a scan button (**Scan TV folder**, **Scan movie folder**, **Scan books folder**, **Scan audiobooks folder**), and Settings, Libraries has **Scan all libraries**. A scan adds what is already on disk as owned, so Bragi never downloads it again. Nothing is moved, renamed or downloaded.
+Each Library tab has a scan button (**Scan TV folder**, **Scan movie folder**, **Scan books folder**, **Scan audiobooks folder**, **Scan music folder**), and Settings, Libraries has **Scan all libraries**. A scan adds what is already on disk as owned, so Bragi never downloads it again. Nothing is moved, renamed or downloaded.
 
 - **TV and movies:** each `Title (Year)` folder is matched on TMDB.
 - **Ebooks and audiobooks:** any layout works, including Grimmory and Booklore naming patterns (`Author/Series/01. Title.epub`), Calibre (`Author/Title (123)/…`) and Audiobookshelf (`Author/Title/…`). Bragi reads the title and author from the file itself (EPUB metadata, audio tags) or from the path, and checks it against Open Library. Multi-part audiobooks, including `CD1`/`Disc 2` folders, count as one book. An ebook and an audiobook library may point at the same folder.
+- **Music:** every folder with audio files is an album (`CD 1`/`Disc 2` subfolders belong to it). Bragi groups files by their tags, uses MusicBrainz ids when the files carry them (as Picard and beets write), and otherwise looks up artist and album on MusicBrainz.
 
 Anything a scan cannot recognise is listed on its Library tab with **Find match** (search and pick the right title) and **Ignore**. Every library is also rescanned each night at 3 AM in the container's `TZ`, which picks up new files and skips what was already unrecognised; turn that off under Settings, Libraries.
 
@@ -92,6 +103,7 @@ Everything the UI does goes through the REST API under `/api/v1`. Scripts authen
 GET  /api/v1/discover/search?type=tv&q=   search TMDB, marked with what you already have
 GET  /api/v1/discover/trending?type=tv    this week's trending shows, marked the same way
 POST /api/v1/requests                     {"type":"tv","tmdbId":95396,"seasons":"all"|"latest"|"future"|[1,2]}
+POST /api/v1/requests                     {"type":"music","artistId":"<mbid>","monitor":"all"|"future"|"none","albums":["<mbid>"]} or {"type":"music","albumId":"<mbid>"}
 GET  /api/v1/requests?mine=true&status=   requests with progress
 GET  /api/v1/requests/{id}                one request, with every episode's status
 POST /api/v1/requests/{id}/approve|deny   admins

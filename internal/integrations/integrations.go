@@ -80,6 +80,9 @@ type Release struct {
 	Seeders     int       `json:"seeders"`
 	PublishedAt time.Time `json:"publishedAt"`
 	Indexer     string    `json:"indexer"`
+	// Files counts the audio files of a Soulseek album, so a search can
+	// check it has every track.
+	Files int `json:"files,omitempty"`
 }
 
 // Job states every client maps onto.
@@ -165,6 +168,7 @@ func downloadOptions(client string) []Field {
 	return []Field{
 		{Name: "categories.tv", Label: "Category for TV", Type: "text", Placeholder: "tv", Help: help, Advanced: true},
 		{Name: "categories.movie", Label: "Category for movies", Type: "text", Placeholder: "movies", Advanced: true},
+		{Name: "categories.music", Label: "Category for music", Type: "text", Placeholder: "music", Advanced: true},
 		{Name: "categories.book", Label: "Category for ebooks", Type: "text", Placeholder: "books", Advanced: true},
 		{Name: "categories.audiobook", Label: "Category for audiobooks", Type: "text", Placeholder: "audiobooks", Advanced: true},
 		{Name: "remotePath", Label: "Download folder in " + client, Type: "text", Placeholder: "/downloads", Advanced: true,

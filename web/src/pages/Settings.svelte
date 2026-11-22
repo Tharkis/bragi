@@ -5,6 +5,7 @@
   import IntegrationSection from '../components/IntegrationSection.svelte'
   import LibrarySection from '../components/LibrarySection.svelte'
   import ConnectionsSection from '../components/ConnectionsSection.svelte'
+  import MusicSettings from '../components/MusicSettings.svelte'
 
   let { me } = $props()
 
@@ -13,6 +14,7 @@
     { path: '/settings/downloadclients', label: 'Download clients' },
     { path: '/settings/libraries', label: 'Libraries' },
     { path: '/settings/quality', label: 'Quality' },
+    { path: '/settings/music', label: 'Music' },
     { path: '/settings/connections', label: 'Connections' },
     { path: '/settings/account', label: 'Account' },
   ]
@@ -63,20 +65,27 @@
 {:else if route.path === '/settings/quality'}
   <h2>Quality presets</h2>
   <p class="muted small">Each library uses one preset. Bragi takes the first quality in the list it can find, under the size cap.</p>
+  {#each [['video', 'TV and movies'], ['music', 'Music']] as [kind, heading] (kind)}
+  <h3>{heading}</h3>
   <div class="stack">
-    {#each presets as p (p.id)}
+    {#each presets.filter((p) => (p.mediaType || 'video') === kind) as p (p.id)}
       <div class="card">
         <strong>{p.name}</strong>
         <p class="muted small">{p.description}</p>
         <div class="row">
           {#each p.qualities as q (q)}<span class="badge">{q}</span>{/each}
         </div>
-        <p class="muted small" style="margin: 8px 0 0">
-          Size cap: {p.maxMbPerMin ? `${p.maxMbPerMin} MB per minute` : 'none'}
-        </p>
+        {#if kind === 'video'}
+          <p class="muted small" style="margin: 8px 0 0">
+            Size cap: {p.maxMbPerMin ? `${p.maxMbPerMin} MB per minute` : 'none'}
+          </p>
+        {/if}
       </div>
     {/each}
   </div>
+  {/each}
+{:else if route.path === '/settings/music'}
+  <MusicSettings />
 {:else if route.path === '/settings/connections'}
   <ConnectionsSection />
 {:else if route.path === '/settings/account'}
@@ -95,6 +104,10 @@
 {/if}
 
 <style>
+  h3 {
+    font-size: 0.95rem;
+    margin: 18px 0 8px;
+  }
   .tabs {
     display: flex;
     gap: 4px;

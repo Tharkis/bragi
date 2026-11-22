@@ -12,6 +12,7 @@ import (
 	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/metadata"
 	"github.com/Tharkis/bragi/internal/movies"
+	"github.com/Tharkis/bragi/internal/music"
 	"github.com/Tharkis/bragi/internal/scan"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
@@ -20,18 +21,21 @@ import (
 // NewScanManager builds the library scanner with every media type's
 // pipeline. Once a scan ends, the pipeline searches for anything newly
 // wanted (new episodes of an adopted show, say).
-func NewScanManager(st *store.Store, log *slog.Logger, hub *events.Hub, t *tv.Service, m *movies.Service, b *books.Service) *scan.Manager {
+func NewScanManager(st *store.Store, log *slog.Logger, hub *events.Hub, t *tv.Service, m *movies.Service, b *books.Service, mu *music.Service) *scan.Manager {
 	mgr := scan.New(st, log, hub)
 	mgr.Register("tv", t)
 	mgr.Register("movie", m)
 	mgr.Register("book", b)
 	mgr.Register("audiobook", b)
+	mgr.Register("music", mu)
 	mgr.After = func(mediaType string) {
 		switch mediaType {
 		case "tv":
 			t.Kick()
 		case "movie":
 			m.Kick()
+		case "music":
+			mu.Kick()
 		default:
 			b.Kick()
 		}
@@ -88,7 +92,7 @@ func (s *Server) scanAllState(ctx context.Context) scanAllState {
 	last, _ := s.store.GetSetting(ctx, scan.SettingLastFull)
 	out := scanAllState{Running: s.scans.Busy(), Nightly: nightly != "false", LastFull: last, Hour: scan.NightlyHour,
 		Types: map[string]scan.Status{}}
-	for _, t := range []string{"tv", "movie", "book", "audiobook"} {
+	for _, t := range []string{"tv", "movie", "music", "book", "audiobook"} {
 		out.Types[t] = s.scans.State(t)
 	}
 	return out
@@ -150,6 +154,8 @@ func (s *Server) handleMatchUnmatched(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, sentence(nm.Reason))
 	case errors.Is(err, metadata.ErrNotFound):
 		writeError(w, http.StatusNotFound, "Open Library has no such book")
+	case errors.Is(err, metadata.ErrNoSuchMusic):
+		writeError(w, http.StatusNotFound, "MusicBrainz has no such album")
 	case err != nil:
 		s.metadataError(w, err)
 	default:
