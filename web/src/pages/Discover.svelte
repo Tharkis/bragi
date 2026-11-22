@@ -6,10 +6,11 @@
   import Badge from '../components/Badge.svelte'
   import { requestStates, isBook } from '../lib/status.js'
   import BookDiscover from '../components/BookDiscover.svelte'
+  import MusicDiscover from '../components/MusicDiscover.svelte'
 
   let { me } = $props()
 
-  const kinds = { tv: 'TV shows', movie: 'Movies', book: 'Books', audiobook: 'Audiobooks' }
+  const kinds = { tv: 'TV shows', movie: 'Movies', book: 'Books', audiobook: 'Audiobooks', music: 'Music' }
   let kind = $state(readKind())
   let query = $state('')
   let results = $state(null)
@@ -44,7 +45,7 @@
   }
 
   async function search(event) {
-    if (isBook(kind)) return // BookDiscover searches on its own
+    if (isBook(kind) || kind === 'music') return // BookDiscover and MusicDiscover search on their own
     event?.preventDefault()
     clearTimeout(timer)
     const q = query.trim()
@@ -145,7 +146,7 @@
 <div class="page-head">
   <div>
     <h1>Discover</h1>
-    <p class="muted">Find a show or a movie and request it. Bragi does the rest.</p>
+    <p class="muted">Find a show, a movie, a book or some music and request it. Bragi does the rest.</p>
   </div>
 </div>
 
@@ -157,6 +158,8 @@
 
 {#if isBook(kind)}
   {#key kind}<BookDiscover {me} type={kind} />{/key}
+{:else if kind === 'music'}
+  <MusicDiscover {me} />
 {:else}
 <form class="search" onsubmit={search}>
   <input

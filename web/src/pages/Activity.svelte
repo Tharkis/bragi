@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { get, del } from '../lib/api.js'
+  import { get, post, del } from '../lib/api.js'
   import { link } from '../lib/router.svelte.js'
   import { onEvents } from '../lib/events.js'
   import { downloadStates, when, itemPath } from '../lib/status.js'
@@ -30,7 +30,7 @@
     load()
     // Progress is polled from the clients every 30 seconds; refetch then too.
     const t = setInterval(load, 15000)
-    const off = onEvents(['download', 'episodes', 'movie', 'book'], load, 250)
+    const off = onEvents(['download', 'episodes', 'movie', 'book', 'album'], load, 250)
     return () => {
       clearInterval(t)
       off()
@@ -44,6 +44,25 @@
       await load()
     } catch (e) {
       error = e.message
+    }
+  }
+
+  // A music download whose files did not clearly match the album waits
+  // for a person: import it as it is, or remove it and search again.
+  const NEEDS = 'Needs a decision: '
+  const waiting = (d) => d.status === 'completed' && d.error?.startsWith(NEEDS)
+  let importing = $state(0)
+
+  async function importAnyway(d) {
+    importing = d.id
+    error = ''
+    try {
+      await post(`/activity/queue/${d.id}/import`)
+      await load()
+    } catch (e) {
+      error = e.message
+    } finally {
+      importing = 0
     }
   }
 
@@ -72,9 +91,9 @@
 
 <div class="stack">
   {#each items as d (d.id)}
-    {@const [label, tone] = d.stage && d.status === 'downloading' ? [d.stage, 'accent'] : (downloadStates[d.status] ?? [d.status, ''])}
+    {@const [label, tone] = waiting(d) ? ['Needs a decision', 'warn'] : d.stage && d.status === 'downloading' ? [d.stage, 'accent'] : (downloadStates[d.status] ?? [d.status, ''])}
     <div class="card dl">
-      <Poster url={d.posterUrl} title={d.seriesTitle} size="sm" />
+      <Poster url={d.posterUrl} title={d.seriesTitle} size="sm" square={d.mediaType === 'music'} />
       <div class="body">
         <div class="spread">
           <div class="what">
@@ -97,7 +116,19 @@
             >
             {#if admin}<button class="link small" onclick={() => remove(d)}>Remove</button>{/if}
           </div>
-          {#if d.error}<div class="small warn-text">{d.error}</div>{/if}
+          {#if waiting(d)}
+            <div class="decide">
+              <div class="small">{d.error.slice(NEEDS.length)}</div>
+              {#if admin}
+                <div class="row">
+                  <button class="primary" onclick={() => importAnyway(d)} disabled={importing === d.id}>
+                    {importing === d.id ? 'Importing…' : 'Import anyway'}
+                  </button>
+                  <button onclick={() => remove(d)}>Remove and search again</button>
+                </div>
+              {/if}
+            </div>
+          {:else if d.error}<div class="small warn-text">{d.error}</div>{/if}
         {:else}
           <div class="small muted">
             {d.quality} · {d.size} · {d.indexer} · {when(d.updatedAt + '')}
@@ -136,5 +167,13 @@
   }
   .warn-text {
     color: var(--warn);
+  }
+  .decide {
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border-left: 3px solid var(--warn);
   }
 </style>

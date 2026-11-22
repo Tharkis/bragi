@@ -1,11 +1,11 @@
 <script>
-  let { url, title, size = 'md' } = $props()
+  let { url, title, size = 'md', square = false } = $props()
 </script>
 
 {#if url}
-  <img class="poster {size}" src={url} alt="" loading="lazy" />
+  <img class="poster {size}" class:square src={url} alt="" loading="lazy" />
 {:else}
-  <div class="poster {size} blank" aria-hidden="true">{title?.[0] ?? '?'}</div>
+  <div class="poster {size} blank" class:square aria-hidden="true">{title?.[0] ?? '?'}</div>
 {/if}
 
 <style>
@@ -16,6 +16,9 @@
     border-radius: 8px;
     background: var(--surface-2);
     width: 100%;
+  }
+  .square {
+    aspect-ratio: 1 / 1;
   }
   .sm {
     width: 44px;

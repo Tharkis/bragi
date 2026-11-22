@@ -8,7 +8,7 @@ Needs Jellyfin 12.
 
 **Web and mobile apps** (browsers, Jellyfin Media Player, the Android and iOS apps):
 
-- A **Request** button in the header. It opens a panel with this week's trending shows, a search box, and **My requests** with each request's status and progress.
+- A **Request** button in the header. It opens a panel with this week's trending shows, a **Music** tab to follow an artist or request an album, a search box, and **My requests** with each request's status and progress.
 - **Request from Bragi** under Jellyfin's own search results, for shows you don't have yet.
 - Requesting asks which seasons: all, the latest, only new episodes, or a pick.
 

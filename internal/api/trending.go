@@ -20,8 +20,12 @@ type discoverPage struct {
 // is already in the library or requested. The Jellyfin plugin fills its
 // Request library from it.
 func (s *Server) handleDiscoverTrending(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("type") == "music" {
+		s.handleTrendingMusic(w, r)
+		return
+	}
 	if t := r.URL.Query().Get("type"); t != "" && t != "tv" {
-		writeError(w, http.StatusBadRequest, "only type=tv is supported so far")
+		writeError(w, http.StatusBadRequest, "only type=tv or type=music is supported so far")
 		return
 	}
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))

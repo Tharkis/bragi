@@ -15,6 +15,9 @@
   import Requests from './pages/Requests.svelte'
   import Book from './pages/Book.svelte'
   import BookLibrary from './components/BookLibrary.svelte'
+  import MusicLibrary from './components/MusicLibrary.svelte'
+  import Artist from './pages/Artist.svelte'
+  import Album from './pages/Album.svelte'
 
   let status = $state(null)
   let me = $state(null)
@@ -65,9 +68,11 @@
   const seriesId = $derived(route.path.match(/^\/library\/(\d+)$/)?.[1])
   const movieId = $derived(route.path.match(/^\/movies\/(\d+)$/)?.[1])
   const bookId = $derived(route.path.match(/^\/books\/(\d+)$/)?.[1])
+  const artistId = $derived(route.path.match(/^\/artists\/(\d+)$/)?.[1])
+  const albumId = $derived(route.path.match(/^\/albums\/(\d+)$/)?.[1])
 
   const active = (path) =>
-    route.path === path || route.path.startsWith(path + '/') || (path === '/library' && /^\/(movies|books)\//.test(route.path))
+    route.path === path || route.path.startsWith(path + '/') || (path === '/library' && /^\/(movies|books|artists|albums)\//.test(route.path))
 </script>
 
 {#if loading}
@@ -118,6 +123,12 @@
         {#key route.path}<Library {me} kind={route.path === '/library/movies' ? 'movie' : 'tv'} />{/key}
       {:else if route.path === '/library/books' || route.path === '/library/audiobooks'}
         {#key route.path}<BookLibrary {me} type={route.path === '/library/books' ? 'book' : 'audiobook'} />{/key}
+      {:else if route.path === '/library/music'}
+        <MusicLibrary {me} />
+      {:else if artistId}
+        {#key artistId}<Artist id={artistId} {me} />{/key}
+      {:else if albumId}
+        {#key albumId}<Album id={albumId} {me} />{/key}
       {:else if seriesId}
         {#key seriesId}<Series id={seriesId} {me} />{/key}
       {:else if movieId}

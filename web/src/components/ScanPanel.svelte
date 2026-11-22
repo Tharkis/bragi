@@ -14,9 +14,13 @@
     movie: ['movie', 'movies', 'folder'],
     book: ['book', 'books', 'file'],
     audiobook: ['audiobook', 'audiobooks', 'item'],
+    music: ['album', 'albums', 'folder'],
   }
   const [one, many, thing] = nouns[type]
   const isBook = type === 'book' || type === 'audiobook'
+  const isMusic = type === 'music'
+  // keyOf is the id a search result is matched by.
+  const keyOf = (r) => (isMusic ? r.albumId : isBook ? r.bookId : String(r.tmdbId))
 
   let scan = $state(null)
   let unmatched = $state([])
@@ -70,7 +74,8 @@
     searching = true
     matchError = ''
     try {
-      results = await get(`/discover/search?type=${type}&q=${encodeURIComponent(query)}`)
+      const r = await get(`/discover/search?type=${type}&q=${encodeURIComponent(query)}`)
+      results = isMusic ? r.albums : r
     } catch (e) {
       matchError = e.message
     } finally {
@@ -79,7 +84,7 @@
   }
 
   async function choose(r) {
-    const id = isBook ? r.bookId : String(r.tmdbId)
+    const id = keyOf(r)
     matching = id
     matchError = ''
     try {
@@ -160,7 +165,7 @@
   <Modal title="Find match" onClose={() => (picking = null)} wide>
     <p class="small muted path">{picking.path}</p>
     <form class="row searchrow" onsubmit={search}>
-      <input bind:value={query} placeholder={isBook ? 'Title and author' : 'Title'} aria-label="Search" />
+      <input bind:value={query} placeholder={isMusic ? 'Artist - Album' : isBook ? 'Title and author' : 'Title'} aria-label="Search" />
       <button class="primary" disabled={searching}>{searching ? 'Searching…' : 'Search'}</button>
     </form>
     {#if matchError}<div class="notice bad">{matchError}</div>{/if}
@@ -169,12 +174,12 @@
     {/if}
     {#if results?.length}
       <div class="choices">
-        {#each results.slice(0, 12) as r (isBook ? r.bookId : r.tmdbId)}
+        {#each results.slice(0, 12) as r (keyOf(r))}
           <button class="choice" onclick={() => choose(r)} disabled={!!matching}>
-            <Poster url={isBook ? r.coverUrl : r.posterUrl} title={r.title} />
+            <Poster url={isBook || isMusic ? r.coverUrl : r.posterUrl} title={r.title} square={isMusic} />
             <span class="title">{r.title}</span>
-            <span class="small muted">{[r.author, r.year].filter(Boolean).join(' · ')}</span>
-            {#if matching === (isBook ? r.bookId : String(r.tmdbId))}<span class="small">Adding…</span>{/if}
+            <span class="small muted">{[r.author || r.artist, r.year, isMusic && r.albumType !== 'Album' ? r.albumType : ''].filter(Boolean).join(' · ')}</span>
+            {#if matching === keyOf(r)}<span class="small">Adding…</span>{/if}
           </button>
         {/each}
       </div>

@@ -124,3 +124,6 @@ body.bragi-open { overflow: hidden; }
 }
 
 .bragi-header-btn-mui .bragi-icon { width: 24px; height: 24px; }
+
+.bragi-poster.bragi-square { aspect-ratio: 1 / 1; }
+.bragi-poster.bragi-round { border-radius: 50%; }
