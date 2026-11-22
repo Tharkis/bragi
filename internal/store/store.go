@@ -158,11 +158,13 @@ type QualityPreset struct {
 	Qualities   []string `json:"qualities"`
 	MaxMBPerMin float64  `json:"maxMbPerMin"`
 	Builtin     bool     `json:"builtin"`
+	// MediaType is "video" for TV and movies, or "music".
+	MediaType string `json:"mediaType"`
 }
 
 // ListQualityPresets returns all presets.
 func (s *Store) ListQualityPresets(ctx context.Context) ([]QualityPreset, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, name, description, qualities, max_mb_per_min, builtin FROM quality_presets ORDER BY id`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, name, description, qualities, max_mb_per_min, builtin, media_type FROM quality_presets ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +173,7 @@ func (s *Store) ListQualityPresets(ctx context.Context) ([]QualityPreset, error)
 	for rows.Next() {
 		var p QualityPreset
 		var q string
-		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &q, &p.MaxMBPerMin, &p.Builtin); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &q, &p.MaxMBPerMin, &p.Builtin, &p.MediaType); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(q), &p.Qualities); err != nil {
@@ -288,8 +290,8 @@ type Integration struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Category string `json:"category"`
-	// Categories overrides Category per media type (tv, movie, book,
-	// audiobook). Download clients only.
+	// Categories overrides Category per media type (tv, movie, music,
+	// book, audiobook). Download clients only.
 	Categories map[string]string `json:"categories"`
 	// RemotePath and LocalPath map the client's download folder to where
 	// Bragi sees it. Download clients only.
@@ -313,7 +315,7 @@ func (i Integration) CategoryFor(mediaType string) string {
 func (i Integration) AllCategories() []string {
 	out := []string{}
 	seen := map[string]bool{}
-	for _, t := range []string{"", "tv", "movie", "book", "audiobook"} {
+	for _, t := range []string{"", "tv", "movie", "music", "book", "audiobook"} {
 		c := i.Category
 		if t != "" {
 			c = i.CategoryFor(t)

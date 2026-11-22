@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Tharkis/bragi/internal/integrations"
+	"github.com/Tharkis/bragi/internal/music"
 	"github.com/Tharkis/bragi/internal/scan"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
@@ -22,12 +23,20 @@ var editableSettings = map[string]bool{
 	tv.SettingJellyfinURL:    true,
 	tv.SettingJellyfinAPIKey: true,
 	scan.SettingNightly:      true,
+
+	music.SettingAlbumTypes:        true,
+	music.SettingUpgrades:          true,
+	music.SettingNavidromeURL:      true,
+	music.SettingNavidromeUser:     true,
+	music.SettingNavidromePassword: true,
 }
 
 // secretSettings are masked in GET /settings; sending the mask back keeps them.
 var secretSettings = map[string]bool{
 	tv.SettingTMDBKey:        true,
 	tv.SettingJellyfinAPIKey: true,
+
+	music.SettingNavidromePassword: true,
 }
 
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +71,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		v = strings.TrimSpace(v)
-		if k == tv.SettingJellyfinURL {
+		if k == tv.SettingJellyfinURL || k == music.SettingNavidromeURL {
 			v = strings.TrimRight(v, "/")
 		}
 		if err := s.store.SetSetting(r.Context(), k, v); err != nil {

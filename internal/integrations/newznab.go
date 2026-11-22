@@ -82,6 +82,8 @@ func searchParams(q Query) (fn string, cats []string) {
 		return "search", []string{"7000", "7020"}
 	case "audiobook":
 		return "search", []string{"3030"}
+	case "music":
+		return "search", []string{"3000"}
 	}
 	return "tvsearch", []string{"5000"}
 }

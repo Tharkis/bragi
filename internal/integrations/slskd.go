@@ -112,6 +112,10 @@ func (s *slskd) Test(ctx context.Context) error {
 type slskdFile struct {
 	Filename string `json:"filename"`
 	Size     int64  `json:"size"`
+	// Audio details peers report, used to tell an album's quality. They
+	// are not sent back when downloading.
+	BitRate int  `json:"bitRate,omitempty"`
+	VBR     bool `json:"isVariableBitRate,omitempty"`
 }
 
 type slskdResponse struct {
@@ -290,18 +294,65 @@ func groupResponses(responses []slskdResponse, mediaType string) []Release {
 			files := dirs[d]
 			sort.Slice(files, func(i, j int) bool { return files[i].Filename < files[j].Filename })
 			ext := strings.ToUpper(strings.TrimPrefix(path.Ext(strings.ReplaceAll(files[0].Filename, `\`, "/")), "."))
+			if mediaType == "music" {
+				ext = MusicQuality(files)
+			}
 			title := fmt.Sprintf("%s [%s]", lastParts(d, 2), ext)
 			if len(files) == 1 {
 				title = fmt.Sprintf("%s [%s]", lastParts(files[0].Filename, 2), ext)
 			}
+			n := len(files)
 			// Bring the folder's cover art along.
 			if c, ok := covers[d]; ok {
 				files = append(files, c)
 			}
-			out = append(out, mk(title, files))
+			rel := mk(title, files)
+			if mediaType == "music" {
+				rel.Files = n
+			}
+			out = append(out, rel)
 		}
 	}
 	return out
+}
+
+// MusicQuality names the quality of a folder of audio files the way
+// Bragi's quality lists do: "FLAC", "MP3 320", "MP3 V0", "AAC 256", ...
+// The most common format and bit rate among the files wins.
+func MusicQuality(files []slskdFile) string {
+	counts := map[string]int{}
+	best, bestN := "", 0
+	for _, f := range files {
+		q := fileQuality(f)
+		counts[q]++
+		if counts[q] > bestN {
+			best, bestN = q, counts[q]
+		}
+	}
+	return best
+}
+
+func fileQuality(f slskdFile) string {
+	ext := strings.ToUpper(strings.TrimPrefix(path.Ext(strings.ReplaceAll(f.Filename, `\`, "/")), "."))
+	switch ext {
+	case "FLAC", "ALAC", "WAV", "APE", "WV":
+		return "FLAC"
+	case "M4A":
+		ext = "AAC"
+	}
+	if f.BitRate <= 0 {
+		return ext
+	}
+	if ext == "MP3" && f.VBR && f.BitRate >= 220 {
+		return "MP3 V0"
+	}
+	// Peers report 319 or 321 for 320 kbps files.
+	for _, std := range []int{320, 256, 192, 128} {
+		if f.BitRate >= std-8 {
+			return fmt.Sprintf("%s %d", ext, std)
+		}
+	}
+	return fmt.Sprintf("%s %d", ext, f.BitRate)
 }
 
 // isCoverFile reports whether name is a folder's cover art.
@@ -331,7 +382,15 @@ func (s *slskd) Add(ctx context.Context, r Release) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := s.call(ctx, http.MethodPost, "/api/v0/transfers/downloads/"+url.PathEscape(pick.User), pick.Files, nil); err != nil {
+	type want struct {
+		Filename string `json:"filename"`
+		Size     int64  `json:"size"`
+	}
+	files := make([]want, len(pick.Files))
+	for i, f := range pick.Files {
+		files[i] = want{f.Filename, f.Size}
+	}
+	if _, err := s.call(ctx, http.MethodPost, "/api/v0/transfers/downloads/"+url.PathEscape(pick.User), files, nil); err != nil {
 		return "", fmt.Errorf("slskd could not queue the files: %w", err)
 	}
 	return jobName(pick.User, remoteDir(pick.Files[0].Filename)), nil

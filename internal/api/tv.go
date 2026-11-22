@@ -67,8 +67,11 @@ func (s *Server) handleDiscoverSearch(w http.ResponseWriter, r *http.Request) {
 	case "book", "audiobook":
 		s.handleDiscoverBooks(w, r, t)
 		return
+	case "music":
+		s.handleDiscoverMusic(w, r)
+		return
 	default:
-		writeError(w, http.StatusBadRequest, "type must be tv, movie, book or audiobook")
+		writeError(w, http.StatusBadRequest, "type must be tv, movie, music, book or audiobook")
 		return
 	}
 	if q == "" {
@@ -134,11 +137,19 @@ type requestBody struct {
 	Scope  json.RawMessage `json:"seasons"`
 	// BookID is the Open Library work, for type book or audiobook.
 	BookID string `json:"bookId"`
+	// Music: an artist to follow (with what to monitor) or one album, by
+	// MusicBrainz id.
+	ArtistID string   `json:"artistId"`
+	Monitor  string   `json:"monitor"`
+	Albums   []string `json:"albums"`
+	AlbumID  string   `json:"albumId"`
 }
 
 type requestProgress struct {
 	SeriesID   int64 `json:"seriesId,omitempty"`
 	MovieID    int64 `json:"movieId,omitempty"`
+	ArtistID   int64 `json:"artistId,omitempty"`
+	AlbumID    int64 `json:"albumId,omitempty"`
 	Episodes   int   `json:"episodes"`
 	Imported   int   `json:"imported"`
 	Missing    int   `json:"missing"`
@@ -150,6 +161,8 @@ type requestResponse struct {
 	Seasons   json.RawMessage  `json:"seasons"`
 	PosterURL string           `json:"posterUrl,omitempty"`
 	Progress  *requestProgress `json:"progress,omitempty"`
+	// Music says what a music request asks for.
+	Music *musicScope `json:"music,omitempty"`
 	// Episodes is set on GET /requests/{id}: every monitored episode's status.
 	Episodes []store.Episode `json:"episodes,omitempty"`
 }
@@ -157,6 +170,9 @@ type requestResponse struct {
 func (s *Server) toRequestResponse(ctx context.Context, rq store.Request, withEpisodes bool) requestResponse {
 	if store.IsBookType(rq.MediaType) {
 		return s.bookRequestResponse(ctx, rq)
+	}
+	if rq.MediaType == "music" {
+		return s.musicRequestResponse(ctx, rq)
 	}
 	out := requestResponse{Request: rq, PosterURL: posterURL(rq.PosterPath, "w185")}
 	if rq.MediaType == "movie" {
@@ -201,8 +217,12 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		s.createMovieRequest(w, r, in)
 		return
 	}
+	if in.Type == "music" {
+		s.createMusicRequest(w, r, in)
+		return
+	}
 	if in.Type != "tv" {
-		writeError(w, http.StatusBadRequest, "type must be tv, movie, book or audiobook")
+		writeError(w, http.StatusBadRequest, "type must be tv, movie, music, book or audiobook")
 		return
 	}
 	if in.TMDBID <= 0 {
@@ -256,6 +276,9 @@ func (s *Server) approve(ctx context.Context, rq *store.Request, reason string) 
 	}
 	if rq.MediaType == "movie" {
 		return s.approveMovie(ctx, rq, reason)
+	}
+	if rq.MediaType == "music" {
+		return s.approveMusic(ctx, rq, reason)
 	}
 	var scope tv.Scope
 	json.Unmarshal([]byte(rq.Scope), &scope)
@@ -350,6 +373,10 @@ func (s *Server) handleApproveRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if store.IsBookType(rq.MediaType) {
 			s.bookError(w, err)
+			return
+		}
+		if rq.MediaType == "music" {
+			s.musicError(w, err)
 			return
 		}
 		s.metadataError(w, err)
@@ -640,6 +667,9 @@ func toDownloads(ds []store.Download) []downloadResponse {
 		if store.IsBookType(d.MediaType) {
 			p = coverURL(d.PosterPath, "S")
 		}
+		if d.MediaType == "music" {
+			p = metadata.AlbumCoverURL(d.AlbumMBID, 250)
+		}
 		out = append(out, downloadResponse{Download: d, Size: release.HumanSize(d.SizeBytes), PosterURL: p})
 	}
 	return out
@@ -677,6 +707,8 @@ func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
 			cancel = func(ctx context.Context, _ int64) error { return s.books.Cancel(ctx, d) }
 		case d.MediaType == "movie":
 			cancel = s.movies.Cancel
+		case d.MediaType == "music":
+			cancel = func(ctx context.Context, _ int64) error { return s.music.Cancel(ctx, d) }
 		}
 	}
 	if err := cancel(r.Context(), id); err != nil {

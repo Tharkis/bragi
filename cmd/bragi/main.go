@@ -22,6 +22,7 @@ import (
 	"github.com/Tharkis/bragi/internal/db"
 	"github.com/Tharkis/bragi/internal/events"
 	"github.com/Tharkis/bragi/internal/movies"
+	"github.com/Tharkis/bragi/internal/music"
 	"github.com/Tharkis/bragi/internal/store"
 	"github.com/Tharkis/bragi/internal/tv"
 	"github.com/Tharkis/bragi/web"
@@ -86,7 +87,15 @@ func run() error {
 	bookPipeline := books.New(st, hc, log, hub)
 	bookPipeline.OnImported = pipeline.RefreshJellyfin
 	go bookPipeline.Run(ctx)
-	scans := api.NewScanManager(st, log, hub, pipeline, moviePipeline, bookPipeline)
+	musicPipeline := music.New(st, hc, log, hub)
+	musicPipeline.OnImported = func(ctx context.Context) error {
+		if err := musicPipeline.RefreshNavidrome(ctx); err != nil {
+			log.Warn("Navidrome scan request failed", "err", err)
+		}
+		return pipeline.RefreshJellyfin(ctx)
+	}
+	go musicPipeline.Run(ctx)
+	scans := api.NewScanManager(st, log, hub, pipeline, moviePipeline, bookPipeline, musicPipeline)
 	scans.Nightly = true
 	scans.Pace = 300 * time.Millisecond // be gentle with TMDB and Open Library
 	go scans.Run(ctx)
@@ -94,7 +103,7 @@ func run() error {
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
 		Handler: api.New(api.Options{Store: st, Logger: log, Version: version, UI: ui,
-			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Movies: moviePipeline, Books: bookPipeline, Events: hub, Scans: scans}),
+			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Movies: moviePipeline, Books: bookPipeline, Music: musicPipeline, Events: hub, Scans: scans}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

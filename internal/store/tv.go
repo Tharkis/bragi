@@ -506,6 +506,8 @@ type Download struct {
 	ClientName  string `json:"clientName"`
 	// MediaType is the type of the item the download is for: tv, movie, book, ...
 	MediaType string `json:"mediaType"`
+	// AlbumMBID is the album's MusicBrainz id, for music downloads.
+	AlbumMBID string `json:"albumMbid,omitempty"`
 }
 
 const downloadCols = `d.id, COALESCE(d.media_item_id, 0), COALESCE(d.download_client_id, 0), d.client_job_id, d.release_title, d.protocol,
@@ -514,7 +516,7 @@ const downloadCols = `d.id, COALESCE(d.media_item_id, 0), COALESCE(d.download_cl
 	COALESCE(CASE m.level WHEN 'work' THEN m.id WHEN 'unit' THEN p.id ELSE g.id END, 0),
 	COALESCE(CASE m.level WHEN 'work' THEN m.title WHEN 'unit' THEN p.title ELSE g.title END, ''),
 	COALESCE(CASE m.level WHEN 'work' THEN m.poster_path WHEN 'unit' THEN p.poster_path ELSE g.poster_path END, ''),
-	COALESCE(c.name, ''), COALESCE(m.media_type, '')`
+	COALESCE(c.name, ''), COALESCE(m.media_type, ''), COALESCE(m.title, ''), COALESCE(m.foreign_id, '')`
 
 const downloadFrom = ` FROM downloads d
 	LEFT JOIN media_items m ON m.id = d.media_item_id
@@ -524,11 +526,11 @@ const downloadFrom = ` FROM downloads d
 
 func scanDownload(row interface{ Scan(...any) error }) (*Download, error) {
 	var d Download
-	var level string
+	var level, title, foreign string
 	var num, parentNum int
 	if err := row.Scan(&d.ID, &d.MediaItemID, &d.DownloadClientID, &d.ClientJobID, &d.ReleaseTitle, &d.Protocol, &d.Indexer,
 		&d.SizeBytes, &d.Quality, &d.Status, &d.Progress, &d.OutputPath, &d.Error, &d.CreatedAt, &d.UpdatedAt,
-		&level, &num, &parentNum, &d.SeriesID, &d.SeriesTitle, &d.PosterPath, &d.ClientName, &d.MediaType); err != nil {
+		&level, &num, &parentNum, &d.SeriesID, &d.SeriesTitle, &d.PosterPath, &d.ClientName, &d.MediaType, &title, &foreign); err != nil {
 		return nil, mapErr(err)
 	}
 	if d.Status == "queued" || d.Status == "downloading" {
@@ -544,6 +546,9 @@ func scanDownload(row interface{ Scan(...any) error }) (*Download, error) {
 		}
 	case "unit":
 		d.Label = seasonTitle(num)
+		if d.MediaType == "music" {
+			d.Label, d.AlbumMBID = title, foreign
+		}
 	case "leaf":
 		d.Label = "S" + pad2(parentNum) + "E" + pad2(num)
 	}
