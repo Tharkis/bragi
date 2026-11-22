@@ -20,7 +20,7 @@ The Bragi API key stays on the Jellyfin server. Browsers and apps only talk to J
 
 ## Install
 
-1. Download `jellyfin-plugin-bragi.zip` from the latest `plugin-v*` release (or the build artifact of the Jellyfin plugin workflow).
+1. Download `jellyfin-plugin-bragi.zip` from the [latest `plugin-v*` release](https://github.com/Tharkis/bragi/releases) (or the build artifact of the Jellyfin plugin workflow). Maintainers publish a release from Actions, *Jellyfin plugin*, *Run workflow*, with a version number.
 2. Unzip it into Jellyfin's plugin folder, so you have `plugins/Bragi/Jellyfin.Plugin.Bragi.dll` (on Docker and Unraid: `/config/plugins/Bragi/`).
 3. Restart Jellyfin.
 

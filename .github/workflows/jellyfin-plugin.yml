@@ -7,6 +7,12 @@ on:
     tags: ["plugin-v*"]
   pull_request:
     paths: ["jellyfin-plugin/**", ".github/workflows/jellyfin-plugin.yml"]
+  # Publish a release from the Actions tab: Run workflow, enter a version.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Plugin version to release, e.g. 0.1.0 (creates tag plugin-v<version>)"
+        required: true
 
 permissions:
   contents: write
@@ -33,7 +39,10 @@ jobs:
           name: jellyfin-plugin-bragi
           path: jellyfin-plugin-bragi.zip
       - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/plugin-v')
+        if: startsWith(github.ref, 'refs/tags/plugin-v') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('plugin-v{0}', inputs.version) || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ github.event_name == 'workflow_dispatch' && format('Jellyfin plugin {0}', inputs.version) || github.ref_name }}
           files: jellyfin-plugin-bragi.zip
