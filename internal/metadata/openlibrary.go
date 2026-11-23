@@ -190,3 +190,25 @@ func CoverIDString(id int) string {
 	}
 	return strconv.Itoa(id)
 }
+
+// TrendingBooks returns up to n works from Open Library's weekly trending
+// list (what people opened and borrowed most this week).
+func (o *OpenLibrary) TrendingBooks(ctx context.Context, n int) ([]Book, error) {
+	var res struct {
+		Works []olDoc `json:"works"`
+	}
+	if err := o.get(ctx, "/trending/weekly.json", url.Values{"limit": {strconv.Itoa(n)}}, &res); err != nil {
+		return nil, err
+	}
+	out := make([]Book, 0, len(res.Works))
+	for _, d := range res.Works {
+		if !strings.HasPrefix(d.Key, "/works/") || d.Title == "" {
+			continue
+		}
+		out = append(out, d.book())
+		if len(out) == n {
+			break
+		}
+	}
+	return out, nil
+}

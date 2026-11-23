@@ -77,7 +77,7 @@ func (s *Server) seerrRoutes() {
 	m.HandleFunc("GET "+seerrBase+"/search", user(s.seerrSearch))
 	m.HandleFunc("GET "+seerrBase+"/discover/trending", user(s.seerrTrending))
 	m.HandleFunc("GET "+seerrBase+"/discover/tv", user(s.seerrTrending))
-	m.HandleFunc("GET "+seerrBase+"/discover/movies", user(s.seerrEmptyPage))
+	m.HandleFunc("GET "+seerrBase+"/discover/movies", user(s.seerrTrendingMovies))
 	m.HandleFunc("GET "+seerrBase+"/tv/{id}", user(s.seerrTV))
 	m.HandleFunc("GET "+seerrBase+"/tv/{id}/season/{season}", user(s.seerrSeason))
 	m.HandleFunc("GET "+seerrBase+"/movie/{id}", user(s.seerrMovie))
@@ -449,8 +449,18 @@ func (s *Server) seerrTrending(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) seerrEmptyPage(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, seerrPage{Page: 1, TotalPages: 1, Results: []any{}})
+// seerrTrendingMovies answers Jellyseerr's movie discover list with this
+// week's trending movies from Bragi's own discover API.
+func (s *Server) seerrTrendingMovies(w http.ResponseWriter, r *http.Request) {
+	out := seerrPage{Page: 1, TotalPages: 1, Results: []any{}}
+	var movies []map[string]any
+	if s.internalCall(r, http.MethodGet, "/api/v1/discover/trending?type=movie", nil, &movies) == http.StatusOK {
+		for _, mv := range movies {
+			out.Results = append(out.Results, s.seerrMovieFromDiscover(r.Context(), mv))
+		}
+	}
+	out.TotalResults = len(out.Results)
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) seerrEmptyList(w http.ResponseWriter, r *http.Request) {

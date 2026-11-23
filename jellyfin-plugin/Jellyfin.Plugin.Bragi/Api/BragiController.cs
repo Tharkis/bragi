@@ -49,6 +49,31 @@ public class BragiController : ControllerBase
     public Task<IActionResult> TrendingMusic(CancellationToken ct)
         => Proxy(HttpMethod.Get, "/api/v1/discover/trending?type=music", null, ct);
 
+    /// <summary>Searches TMDB for movies through Bragi, marked with what Bragi already has.</summary>
+    [HttpGet("Movies/Search")]
+    public Task<IActionResult> SearchMovies([FromQuery] string query, CancellationToken ct)
+        => Proxy(HttpMethod.Get, "/api/v1/discover/search?type=movie&q=" + Uri.EscapeDataString(query ?? string.Empty), null, ct);
+
+    /// <summary>This week's trending movies, marked with what Bragi already has.</summary>
+    [HttpGet("Movies/Trending")]
+    public Task<IActionResult> TrendingMovies(CancellationToken ct)
+        => Proxy(HttpMethod.Get, "/api/v1/discover/trending?type=movie", null, ct);
+
+    /// <summary>Searches Open Library through Bragi for ebooks (type=book) or audiobooks (type=audiobook).</summary>
+    [HttpGet("Books/Search")]
+    public Task<IActionResult> SearchBooks([FromQuery] string query, [FromQuery] string? type, CancellationToken ct)
+        => Proxy(HttpMethod.Get, "/api/v1/discover/search?type=" + BookType(type) + "&q=" + Uri.EscapeDataString(query ?? string.Empty), null, ct);
+
+    /// <summary>Open Library's weekly trending books, marked for one format.</summary>
+    [HttpGet("Books/Trending")]
+    public Task<IActionResult> TrendingBooks([FromQuery] string? type, CancellationToken ct)
+        => Proxy(HttpMethod.Get, "/api/v1/discover/trending?type=" + BookType(type), null, ct);
+
+    /// <summary>The media types Bragi has a library for, so the panel only shows tabs it can fill.</summary>
+    [HttpGet("MediaTypes")]
+    public Task<IActionResult> MediaTypes(CancellationToken ct)
+        => Proxy(HttpMethod.Get, "/api/v1/discover/types", null, ct);
+
     /// <summary>One show's seasons, for the season picker.</summary>
     [HttpGet("Shows/{tmdbId:int}")]
     public Task<IActionResult> Show([FromRoute] int tmdbId, CancellationToken ct)
@@ -59,7 +84,7 @@ public class BragiController : ControllerBase
     public Task<IActionResult> MyRequests(CancellationToken ct)
         => Proxy(HttpMethod.Get, "/api/v1/requests?mine=true", null, ct);
 
-    /// <summary>Requests a show ({"type":"tv","tmdbId":1,"seasons":"all"}), an album ({"type":"music","albumId":"..."}) or an artist ({"type":"music","artistId":"...","monitor":"all"}).</summary>
+    /// <summary>Requests a show ({"type":"tv","tmdbId":1,"seasons":"all"}), a movie ({"type":"movie","tmdbId":1}), an ebook or audiobook ({"type":"book","bookId":"OL1W"}), an album ({"type":"music","albumId":"..."}) or an artist ({"type":"music","artistId":"...","monitor":"all"}).</summary>
     [HttpPost("Requests")]
     public Task<IActionResult> CreateRequest([FromBody] JsonElement body, CancellationToken ct)
         => Proxy(HttpMethod.Post, "/api/v1/requests", body.GetRawText(), ct);
@@ -160,6 +185,8 @@ public class BragiController : ControllerBase
 
         return new ContentResult { StatusCode = (int)res.Status, Content = res.Body, ContentType = MediaTypeNames.Application.Json };
     }
+
+    private static string BookType(string? type) => type == "audiobook" ? "audiobook" : "book";
 
     private Guid? CurrentUserId()
     {

@@ -98,6 +98,13 @@ func OpenLibrary() http.Handler {
 		}
 		writeJSON(w, map[string]any{"numFound": len(docs), "docs": docs})
 	})
+	m.HandleFunc("/trending/weekly.json", func(w http.ResponseWriter, r *http.Request) {
+		works := []map[string]any{}
+		for _, b := range Books {
+			works = append(works, doc(b))
+		}
+		writeJSON(w, map[string]any{"query": "/trending/weekly", "works": works, "days": 7, "hours": 0})
+	})
 	m.HandleFunc("/works/", func(w http.ResponseWriter, r *http.Request) {
 		b := findBook(strings.TrimSuffix(filepath.Base(r.URL.Path), ".json"))
 		if b == nil {

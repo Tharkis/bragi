@@ -47,6 +47,14 @@ func findMovie(id int) *Movie {
 }
 
 func movieRoutes(m *http.ServeMux) {
+	m.HandleFunc("/3/trending/movie/week", func(w http.ResponseWriter, r *http.Request) {
+		results := []map[string]any{}
+		for _, mv := range Movies {
+			results = append(results, map[string]any{"id": mv.ID, "title": mv.Title, "release_date": mv.Released,
+				"overview": mv.Overview, "poster_path": fmt.Sprintf("/m%d.svg", mv.ID), "media_type": "movie"})
+		}
+		writeJSON(w, map[string]any{"page": 1, "total_pages": 1, "results": results})
+	})
 	m.HandleFunc("/3/search/movie", func(w http.ResponseWriter, r *http.Request) {
 		q := strings.ToLower(r.URL.Query().Get("query"))
 		results := []map[string]any{}

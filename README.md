@@ -100,9 +100,11 @@ Anything a scan cannot recognise is listed on its Library tab with **Find match*
 Everything the UI does goes through the REST API under `/api/v1`. Scripts authenticate with the `X-Api-Key` header; find your key under Settings, Account.
 
 ```
-GET  /api/v1/discover/search?type=tv&q=   search TMDB, marked with what you already have
-GET  /api/v1/discover/trending?type=tv    this week's trending shows, marked the same way
+GET  /api/v1/discover/search?type=tv&q=   search (type tv, movie, music, book or audiobook), marked with what you already have
+GET  /api/v1/discover/trending?type=tv    this week's trending titles for that type, marked the same way
+GET  /api/v1/discover/types               the media types Bragi has a library for
 POST /api/v1/requests                     {"type":"tv","tmdbId":95396,"seasons":"all"|"latest"|"future"|[1,2]}
+POST /api/v1/requests                     {"type":"movie","tmdbId":693134} or {"type":"book"|"audiobook","bookId":"OL27448W"}
 POST /api/v1/requests                     {"type":"music","artistId":"<mbid>","monitor":"all"|"future"|"none","albums":["<mbid>"]} or {"type":"music","albumId":"<mbid>"}
 GET  /api/v1/requests?mine=true&status=   requests with progress
 GET  /api/v1/requests/{id}                one request, with every episode's status
@@ -116,7 +118,7 @@ The [Jellyfin plugin](jellyfin-plugin/README.md) signs in with one admin API key
 
 ### Jellyseerr-compatible API
 
-Tools written for Jellyseerr, such as Jellyfin Enhanced, can use Bragi instead: point them at `http://your-server:8787/seerr` with a Bragi admin API key. Bragi answers the request-related endpoints (status, users including `import-from-jellyfin` and `X-Api-User`, search, trending, show details, and requests), and returns 404 for the rest.
+Tools written for Jellyseerr, such as Jellyfin Enhanced, can use Bragi instead: point them at `http://your-server:8787/seerr` with a Bragi admin API key. Bragi answers the request-related endpoints (status, users including `import-from-jellyfin` and `X-Api-User`, search, trending shows and movies, show details, and requests), and returns 404 for the rest.
 
 ## Develop
 
