@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Tharkis/bragi/internal/grabs"
 	"github.com/Tharkis/bragi/internal/integrations"
 	"github.com/Tharkis/bragi/internal/release"
 	"github.com/Tharkis/bragi/internal/store"
@@ -155,26 +156,30 @@ func (s *Service) searchAndGrab(ctx context.Context, t Target) {
 		if errors.Is(err, ErrNoIndexers) {
 			note, retry = "No indexer is set up", NoIndexerRetry
 		}
+		s.Log.Warn("search failed", "for", t.label(), "err", err, "nextSearch", retry)
 		s.Store.SetEpisodeState(ctx, ids, "wanted", note, time.Now().Add(retry))
 		s.publish("episodes", map[string]any{"seriesId": t.Series.ID})
 		return
 	}
-	for _, c := range cands {
-		if c.Rejected != "" {
-			break
+	out := grabs.Try(s.Log, t.label(), cands,
+		grabs.Video,
+		func(c release.Candidate) error { return s.Grab(ctx, t, c) },
+		func(c release.Candidate, reason string) { s.Store.Blocklist(ctx, t.MediaItemID, c.Title, reason) },
+		errNoClient)
+	if out.Grabbed {
+		return
+	}
+	if note, retry, ok := out.Note(); ok {
+		if retry == 0 {
+			retry = RetryAfter
 		}
-		err := s.Grab(ctx, t, c)
-		if err == nil {
-			return
-		}
-		s.Log.Warn("grab failed, trying the next release", "release", c.Title, "err", err)
-		if errors.Is(err, errNoClient) {
-			continue
-		}
-		s.Store.Blocklist(ctx, t.MediaItemID, c.Title, err.Error())
+		s.Store.SetEpisodeState(ctx, ids, "wanted", note, time.Now().Add(retry))
+		s.publish("episodes", map[string]any{"seriesId": t.Series.ID})
+		return
 	}
 	if t.FullSeason {
 		// Try episode by episode right away.
+		s.Log.Info("no season pack found, searching episode by episode", "for", t.label())
 		s.Store.SetEpisodeState(ctx, ids, "wanted", noPackNote, time.Now())
 		s.publish("episodes", map[string]any{"seriesId": t.Series.ID})
 		s.Kick()
@@ -187,6 +192,7 @@ func (s *Service) searchAndGrab(ctx context.Context, t Target) {
 	if searched == 0 {
 		note = "Every indexer failed to answer"
 	}
+	s.Log.Info("nothing grabbed", "for", t.label(), "reason", note, "nextSearch", time.Now().Add(RetryAfter).Format(time.RFC3339))
 	s.Store.SetEpisodeState(ctx, ids, "wanted", note, time.Now().Add(RetryAfter))
 	s.publish("episodes", map[string]any{"seriesId": t.Series.ID})
 }
@@ -196,6 +202,9 @@ func topReasons(cands []release.Candidate) string {
 	counts := map[string]int{}
 	for _, c := range cands {
 		r := c.Rejected
+		if r == "" {
+			continue
+		}
 		if strings.HasPrefix(r, "Too big") {
 			r = "too big"
 		} else if strings.HasSuffix(r, "is not in the quality preset") {
@@ -233,6 +242,7 @@ func (s *Service) Search(ctx context.Context, t Target) ([]release.Candidate, in
 	if !t.FullSeason {
 		q.Episode = t.Episodes[0].Number
 	}
+	s.Log.Info("searching", "for", t.label(), "query", integrations.SearchText(q))
 	var (
 		mu       sync.Mutex
 		wg       sync.WaitGroup
@@ -246,6 +256,7 @@ func (s *Service) Search(ctx context.Context, t Target) ([]release.Candidate, in
 		}
 		a, err := integrations.NewIndexer(ix.Kind, configOf(ix), s.HC)
 		if err != nil {
+			s.Log.Warn("indexer skipped", "indexer", ix.Name, "err", err)
 			continue
 		}
 		enabled++
@@ -262,6 +273,7 @@ func (s *Service) Search(ctx context.Context, t Target) ([]release.Candidate, in
 				return
 			}
 			searched++
+			s.Log.Debug("indexer answered", "indexer", name, "for", t.label(), "results", len(rs))
 			for i := range rs {
 				if rs[i].Indexer == "" {
 					rs[i].Indexer = name
@@ -291,7 +303,7 @@ func (s *Service) Search(ctx context.Context, t Target) ([]release.Candidate, in
 		}
 	}
 	cands := release.Evaluate(all, w, preset)
-	s.Log.Info("searched", "query", t.label(), "indexers", searched, "results", len(all))
+	grabs.LogResults(s.Log, t.label(), searched, cands, grabs.Video, grabs.VideoDetail)
 	return cands, searched, nil
 }
 

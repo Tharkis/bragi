@@ -23,6 +23,7 @@ var editableSettings = map[string]bool{
 	tv.SettingJellyfinURL:    true,
 	tv.SettingJellyfinAPIKey: true,
 	scan.SettingNightly:      true,
+	SettingLogLevel:          true,
 
 	music.SettingAlbumTypes:        true,
 	music.SettingUpgrades:          true,
@@ -73,6 +74,13 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		v = strings.TrimSpace(v)
 		if k == tv.SettingJellyfinURL || k == music.SettingNavidromeURL {
 			v = strings.TrimRight(v, "/")
+		}
+		if k == SettingLogLevel {
+			v = strings.ToLower(v)
+			if err := s.applyLogLevel(v); err != nil {
+				writeError(w, http.StatusBadRequest, sentence(err.Error()))
+				return
+			}
 		}
 		if err := s.store.SetSetting(r.Context(), k, v); err != nil {
 			s.storeError(w, err, "settings")

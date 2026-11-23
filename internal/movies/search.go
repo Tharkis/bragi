@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Tharkis/bragi/internal/grabs"
 	"github.com/Tharkis/bragi/internal/integrations"
 	"github.com/Tharkis/bragi/internal/release"
 	"github.com/Tharkis/bragi/internal/store"
@@ -58,22 +59,23 @@ func (s *Service) searchAndGrab(ctx context.Context, m *store.Movie) {
 		if errors.Is(err, ErrNoIndexers) {
 			note, retry = "No indexer is set up", NoIndexerRetry
 		}
+		s.Log.Warn("search failed", "for", label(m), "err", err, "nextSearch", retry)
 		s.setState(ctx, m, "wanted", note, time.Now().Add(retry))
 		return
 	}
-	for _, c := range cands {
-		if c.Rejected != "" {
-			break
+	out := grabs.Try(s.Log, label(m), cands, grabs.Video,
+		func(c release.Candidate) error { return s.Grab(ctx, m, c) },
+		func(c release.Candidate, reason string) { s.Store.Blocklist(ctx, m.ID, c.Title, reason) },
+		errNoClient)
+	if out.Grabbed {
+		return
+	}
+	if note, retry, ok := out.Note(); ok {
+		if retry == 0 {
+			retry = RetryAfter
 		}
-		err := s.Grab(ctx, m, c)
-		if err == nil {
-			return
-		}
-		s.Log.Warn("grab failed, trying the next release", "release", c.Title, "err", err)
-		if errors.Is(err, errNoClient) {
-			continue
-		}
-		s.Store.Blocklist(ctx, m.ID, c.Title, err.Error())
+		s.setState(ctx, m, "wanted", note, time.Now().Add(retry))
+		return
 	}
 	note := "No releases found"
 	if len(cands) > 0 {
@@ -82,6 +84,7 @@ func (s *Service) searchAndGrab(ctx context.Context, m *store.Movie) {
 	if searched == 0 {
 		note = "Every indexer failed to answer"
 	}
+	s.Log.Info("nothing grabbed", "for", label(m), "reason", note, "nextSearch", time.Now().Add(RetryAfter).Format(time.RFC3339))
 	s.setState(ctx, m, "wanted", note, time.Now().Add(RetryAfter))
 }
 
@@ -90,6 +93,9 @@ func topReasons(cands []release.Candidate) string {
 	counts := map[string]int{}
 	for _, c := range cands {
 		r := c.Rejected
+		if r == "" {
+			continue
+		}
 		if strings.HasPrefix(r, "Too big") {
 			r = "too big"
 		} else if strings.HasSuffix(r, "is not in the quality preset") {
@@ -122,6 +128,7 @@ func (s *Service) Search(ctx context.Context, m *store.Movie) ([]release.Candida
 		return nil, 0, err
 	}
 	q := integrations.Query{MediaType: "movie", Text: m.Title, Year: m.Year, TMDBID: int(m.TMDBID), IMDBID: m.IMDBID}
+	s.Log.Info("searching", "for", label(m), "query", integrations.SearchText(q), "imdb", m.IMDBID)
 	var (
 		mu       sync.Mutex
 		wg       sync.WaitGroup
@@ -135,6 +142,7 @@ func (s *Service) Search(ctx context.Context, m *store.Movie) ([]release.Candida
 		}
 		a, err := integrations.NewIndexer(ix.Kind, configOf(ix), s.HC)
 		if err != nil {
+			s.Log.Warn("indexer skipped", "indexer", ix.Name, "err", err)
 			continue
 		}
 		enabled++
@@ -151,6 +159,7 @@ func (s *Service) Search(ctx context.Context, m *store.Movie) ([]release.Candida
 				return
 			}
 			searched++
+			s.Log.Debug("indexer answered", "indexer", name, "for", label(m), "results", len(rs))
 			for i := range rs {
 				if rs[i].Indexer == "" {
 					rs[i].Indexer = name
@@ -177,7 +186,7 @@ func (s *Service) Search(ctx context.Context, m *store.Movie) ([]release.Candida
 	}
 	w := release.Want{Movie: true, SeriesTitle: m.Title, Year: m.Year, Runtime: runtime, Blocklist: blocked}
 	cands := release.Evaluate(all, w, preset)
-	s.Log.Info("searched", "query", label(m), "indexers", searched, "results", len(all))
+	grabs.LogResults(s.Log, label(m), searched, cands, grabs.Video, grabs.VideoDetail)
 	return cands, searched, nil
 }
 

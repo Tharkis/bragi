@@ -262,6 +262,8 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("request created", "user", u.Username, "title", sh.Title)
 	if u.Role == "admin" || u.AutoApprove {
 		rq, _ = s.approve(r.Context(), rq, "")
+	} else {
+		s.log.Info("request waits for an admin to approve it", "request", rq.ID, "user", u.Username)
 	}
 	s.events.Publish(eventRequest(rq))
 	writeJSON(w, http.StatusCreated, s.toRequestResponse(r.Context(), *rq, false))
@@ -286,6 +288,7 @@ func (s *Server) approve(ctx context.Context, rq *store.Request, reason string) 
 	defer cancel()
 	sr, err := s.tv.AddSeries(actx, rq.TMDBID, 0, scope.Seasons)
 	if err != nil {
+		s.log.Warn("request approved but could not be added; it stays pending", "request", rq.ID, "type", rq.MediaType, "title", rq.Title, "err", err)
 		s.store.SetRequestStatus(ctx, rq.ID, "pending", "Could not add the show: "+sentence(err.Error()), 0)
 		out, _ := s.store.GetRequest(ctx, rq.ID)
 		if out == nil {
@@ -293,6 +296,7 @@ func (s *Server) approve(ctx context.Context, rq *store.Request, reason string) 
 		}
 		return out, err
 	}
+	s.log.Info("request approved", "request", rq.ID, "type", rq.MediaType, "title", rq.Title)
 	s.store.SetRequestStatus(ctx, rq.ID, "approved", reason, sr.ID)
 	s.store.MarkRequestsAvailable(ctx, sr.ID)
 	out, err := s.store.GetRequest(ctx, rq.ID)
@@ -398,6 +402,7 @@ func (s *Server) handleDenyRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "only pending requests can be denied")
 		return
 	}
+	s.log.Info("request denied", "request", rq.ID, "title", rq.Title, "reason", in.Reason)
 	if err := s.store.SetRequestStatus(r.Context(), rq.ID, "denied", in.Reason, 0); err != nil {
 		s.storeError(w, err, "request")
 		return

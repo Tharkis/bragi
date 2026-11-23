@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tharkis/bragi/internal/downloads"
 	"github.com/Tharkis/bragi/internal/integrations"
 	"github.com/Tharkis/bragi/internal/library"
 	"github.com/Tharkis/bragi/internal/release"
@@ -58,6 +59,10 @@ func (s *Service) PollDownloads(ctx context.Context) error {
 func (s *Service) track(ctx context.Context, d store.Download, j integrations.Job, client integrations.DownloadClient) {
 	switch j.State {
 	case integrations.JobQueued, integrations.JobDownloading:
+		if d.Status != j.State {
+			s.Log.Info("download status", "release", d.ReleaseTitle, "from", d.Status, "to", j.State,
+				"progress", fmt.Sprintf("%.0f%%", j.Progress*100), "stage", j.Stage)
+		}
 		if d.Status != j.State || d.Progress != j.Progress || d.Stage != j.Stage {
 			s.Store.UpdateDownload(ctx, d.ID, j.State, j.Progress, j.OutputPath, j.Stage)
 			s.publish("download", map[string]any{"id": d.ID, "seriesId": d.SeriesID, "progress": j.Progress})
@@ -66,12 +71,23 @@ func (s *Service) track(ctx context.Context, d store.Download, j integrations.Jo
 		s.fail(ctx, d, j.Error, true)
 		client.Remove(ctx, d.ClientJobID, true)
 	case integrations.JobMissing:
+		if downloads.JustAdded(d) {
+			// Clients can take a moment to list a new job, magnets above all.
+			s.Log.Debug("download not listed by the client yet", "release", d.ReleaseTitle, "job", d.ClientJobID)
+			return
+		}
 		s.fail(ctx, d, "The download disappeared from the download client", false)
 	case integrations.JobCompleted:
+		if d.Status != "completed" {
+			s.Log.Info("download finished, importing", "release", d.ReleaseTitle, "path", j.OutputPath)
+		}
 		d.OutputPath = j.OutputPath
 		if err := s.importDownload(ctx, d); err != nil {
 			var wait waitError
 			if errors.As(err, &wait) {
+				if d.Error != wait.Error() {
+					s.Log.Warn("import waiting", "release", d.ReleaseTitle, "path", j.OutputPath, "reason", wait.Error())
+				}
 				// Not ready (for example the folder is not visible yet): try again next poll.
 				s.Store.UpdateDownload(ctx, d.ID, "completed", 1, j.OutputPath, wait.Error())
 				s.publish("download", map[string]any{"id": d.ID, "seriesId": d.SeriesID})

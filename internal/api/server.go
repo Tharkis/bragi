@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/Tharkis/bragi/internal/books"
 	"github.com/Tharkis/bragi/internal/events"
+	"github.com/Tharkis/bragi/internal/logging"
 	"github.com/Tharkis/bragi/internal/movies"
 	"github.com/Tharkis/bragi/internal/music"
 	"github.com/Tharkis/bragi/internal/scan"
@@ -35,6 +37,7 @@ type Server struct {
 	music   *music.Service
 	events  *events.Hub
 	scans   *scan.Manager
+	logs    *logging.Manager
 }
 
 // Options configures a Server.
@@ -60,6 +63,9 @@ type Options struct {
 	// Scans runs library scans. Nil builds one that runs scans but not the
 	// nightly scan's clock, for tests.
 	Scans *scan.Manager
+	// Logs feeds the Logs page and owns the live log level. Nil keeps an
+	// in-memory buffer only, for tests.
+	Logs *logging.Manager
 }
 
 // New returns the HTTP handler for the whole app.
@@ -67,8 +73,11 @@ func New(o Options) http.Handler {
 	if o.HTTPClient == nil {
 		o.HTTPClient = &http.Client{Timeout: 15 * time.Second}
 	}
+	if o.Logs == nil {
+		o.Logs, _ = logging.New(io.Discard, "", slog.LevelInfo)
+	}
 	if o.Logger == nil {
-		o.Logger = slog.Default()
+		o.Logger = o.Logs.Logger()
 	}
 	if o.Events == nil {
 		o.Events = events.NewHub()
@@ -90,7 +99,7 @@ func New(o Options) http.Handler {
 		o.Scans = NewScanManager(o.Store, o.Logger, o.Events, o.TV, o.Movies, o.Books, o.Music)
 		go o.Scans.Run(context.Background())
 	}
-	s := &Server{store: o.Store, log: o.Logger, version: o.Version, hc: o.HTTPClient, ui: o.UI, mux: http.NewServeMux(),
+	s := &Server{logs: o.Logs, store: o.Store, log: o.Logger, version: o.Version, hc: o.HTTPClient, ui: o.UI, mux: http.NewServeMux(),
 		tv: o.TV, movies: o.Movies, books: o.Books, music: o.Music, events: o.Events, scans: o.Scans}
 	s.routes()
 	return s.withUser(s.logRequests(s.mux))
@@ -200,6 +209,8 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/v1/albums/{id}/grab", s.requireAdmin(s.handleGrabAlbum))
 	m.HandleFunc("POST /api/v1/activity/queue/{id}/import", s.requireAdmin(s.handleImportAnyway))
 	m.HandleFunc("POST /api/v1/settings/test/navidrome", s.requireAdmin(s.handleTestNavidrome))
+	m.HandleFunc("GET /api/v1/system/logs", s.requireAdmin(s.handleLogs))
+	m.HandleFunc("GET /api/v1/system/logs/download", s.requireAdmin(s.handleDownloadLogs))
 	m.HandleFunc("GET /api/v1/activity/queue", s.requireUser(s.handleQueue))
 	m.HandleFunc("GET /api/v1/activity/history", s.requireUser(s.handleHistory))
 	m.HandleFunc("DELETE /api/v1/activity/queue/{id}", s.requireAdmin(s.handleRemoveDownload))
@@ -292,7 +303,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		if strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/api/v1/system/logs") {
 			s.log.Debug("request", "method", r.Method, "path", r.URL.Path, "status", rec.status, "dur", time.Since(start))
 		}
 	})

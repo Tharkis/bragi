@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -281,10 +282,15 @@ func newDownloadClient(kind string, cfg Config, hc *http.Client) (DownloadClient
 // do sends req and turns transport errors and common status codes into
 // messages a user can act on.
 func do(hc *http.Client, req *http.Request) (*http.Response, error) {
+	start := time.Now()
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("could not reach %s: %w", req.URL.Host, err)
+		slog.Debug("outgoing request failed", "component", "http", "method", req.Method, "url", req.URL.String(),
+			"dur", time.Since(start), "err", err)
+		return nil, &UnreachableError{Host: req.URL.Host, Err: err}
 	}
+	slog.Debug("outgoing request", "component", "http", "method", req.Method, "url", req.URL.String(),
+		"status", resp.StatusCode, "dur", time.Since(start))
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
 		resp.Body.Close()
@@ -314,7 +320,7 @@ func fetch(ctx context.Context, hc *http.Client, url string) ([]byte, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("%s answered HTTP %d", req.URL.Host, resp.StatusCode)
+		return nil, &StatusError{Host: req.URL.Host, Code: resp.StatusCode}
 	}
 	return readBody(resp)
 }

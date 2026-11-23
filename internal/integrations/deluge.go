@@ -179,7 +179,7 @@ func (d *deluge) categories() []string {
 func (d *deluge) Add(ctx context.Context, r Release) (string, error) {
 	src, err := resolveTorrent(ctx, d.hc, r)
 	if err != nil {
-		return "", fmt.Errorf("could not fetch the torrent: %w", err)
+		return "", releaseErr(fmt.Errorf("could not fetch the torrent: %w", err))
 	}
 	hc, err := d.login(ctx)
 	if err != nil {

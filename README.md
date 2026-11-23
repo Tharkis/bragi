@@ -43,7 +43,7 @@ Until Bragi is in Community Applications, add it by hand:
 3. Set **Data** to the share that holds both downloads and media (default `/mnt/user/data`), so imports are instant hardlinks instead of copies. Your download clients should see that same share at the same path (`/data`); if they don't, set a path mapping on the client in Bragi.
 4. Apply, then open the WebUI.
 
-The template uses the `:edge` image, built from every merge to `main`. A `:latest` tag appears with the first `v*` release. Logs go to the container's **Logs** icon; set **Log level** to `debug` (advanced view) when reporting a problem.
+The template uses the `:edge` image, built from every merge to `main`. A `:latest` tag appears with the first `v*` release. Logs go to the container's **Logs** icon and to `/config/logs/bragi.log` (5 MB per file, last 5 kept). When something does not download, open **Settings → Logs**, set the level to **Debug** (it takes effect at once, no restart), retry the search, then use **Download logs** and send the zip. API keys and passwords are blanked out of every line.
 
 ### Docker Compose
 
@@ -70,7 +70,7 @@ Open `http://your-server:8787` and the setup wizard walks you through the admin 
 | `TZ` | `Etc/UTC` | Time zone |
 | `BRAGI_PORT` | `8787` | Web UI and API port |
 | `BRAGI_CONFIG_DIR` | `/config` | Database, logs and backups |
-| `BRAGI_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
+| `BRAGI_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. A level chosen under Settings → Logs overrides it |
 | `BRAGI_TMDB_API_KEY` | | TMDB key to use when none is saved in Settings |
 
 ## How TV works

@@ -97,7 +97,7 @@ func (q *qbittorrent) post(ctx context.Context, hc *http.Client, path, contentTy
 		return fmt.Errorf("qBittorrent answered HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 	if strings.TrimSpace(string(b)) == "Fails." {
-		return fmt.Errorf("qBittorrent refused the torrent")
+		return releaseErr(fmt.Errorf("qBittorrent refused the torrent (it may already have it, or the file is invalid)"))
 	}
 	return nil
 }
@@ -105,7 +105,7 @@ func (q *qbittorrent) post(ctx context.Context, hc *http.Client, path, contentTy
 func (q *qbittorrent) Add(ctx context.Context, r Release) (string, error) {
 	src, err := resolveTorrent(ctx, q.hc, r)
 	if err != nil {
-		return "", fmt.Errorf("could not fetch the torrent: %w", err)
+		return "", releaseErr(fmt.Errorf("could not fetch the torrent: %w", err))
 	}
 	hc, err := q.session(ctx)
 	if err != nil {

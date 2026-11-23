@@ -138,6 +138,8 @@ func (s *Server) createBookRequest(w http.ResponseWriter, r *http.Request, in re
 	s.log.Info("request created", "user", u.Username, "type", in.Type, "title", b.Title)
 	if u.Role == "admin" || u.AutoApprove {
 		rq, _ = s.approve(r.Context(), rq, "")
+	} else {
+		s.log.Info("request waits for an admin to approve it", "request", rq.ID, "user", u.Username)
 	}
 	s.events.Publish(eventRequest(rq))
 	writeJSON(w, http.StatusCreated, s.toRequestResponse(r.Context(), *rq, false))
@@ -150,6 +152,7 @@ func (s *Server) approveBook(ctx context.Context, rq *store.Request, reason stri
 	defer cancel()
 	b, err := s.books.AddBook(actx, rq.MediaType, rq.ForeignID, 0)
 	if err != nil {
+		s.log.Warn("request approved but could not be added; it stays pending", "request", rq.ID, "type", rq.MediaType, "title", rq.Title, "err", err)
 		s.store.SetRequestStatus(ctx, rq.ID, "pending", "Could not add the book: "+sentence(err.Error()), 0)
 		out, _ := s.store.GetRequest(ctx, rq.ID)
 		if out == nil {
@@ -157,6 +160,7 @@ func (s *Server) approveBook(ctx context.Context, rq *store.Request, reason stri
 		}
 		return out, err
 	}
+	s.log.Info("request approved", "request", rq.ID, "type", rq.MediaType, "title", rq.Title)
 	s.store.SetRequestStatus(ctx, rq.ID, "approved", reason, b.ID)
 	if b.Status == "imported" {
 		s.store.MarkBookRequestsAvailable(ctx, b.ID)

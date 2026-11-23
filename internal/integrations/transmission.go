@@ -150,7 +150,7 @@ func (t *transmission) Check(ctx context.Context) ([]string, error) {
 func (t *transmission) Add(ctx context.Context, r Release) (string, error) {
 	src, err := resolveTorrent(ctx, t.hc, r)
 	if err != nil {
-		return "", fmt.Errorf("could not fetch the torrent: %w", err)
+		return "", releaseErr(fmt.Errorf("could not fetch the torrent: %w", err))
 	}
 	s, err := t.sessionInfo(ctx)
 	if err != nil {

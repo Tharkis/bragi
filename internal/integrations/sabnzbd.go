@@ -96,7 +96,7 @@ func (s *sabnzbd) Add(ctx context.Context, r Release) (string, error) {
 	// Bragi fetches the NZB itself, so SABnzbd never needs to reach the indexer.
 	nzb, err := fetch(ctx, s.hc, r.DownloadURL)
 	if err != nil {
-		return "", fmt.Errorf("could not fetch the NZB: %w", err)
+		return "", releaseErr(fmt.Errorf("could not fetch the NZB: %w", err))
 	}
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
@@ -120,7 +120,7 @@ func (s *sabnzbd) Add(ctx context.Context, r Release) (string, error) {
 		return "", err
 	}
 	if !out.Status || len(out.IDs) == 0 {
-		return "", fmt.Errorf("SABnzbd refused the NZB")
+		return "", releaseErr(fmt.Errorf("SABnzbd refused the NZB"))
 	}
 	return out.IDs[0], nil
 }

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata" // so TZ works in the slim image
@@ -21,6 +22,7 @@ import (
 	"github.com/Tharkis/bragi/internal/config"
 	"github.com/Tharkis/bragi/internal/db"
 	"github.com/Tharkis/bragi/internal/events"
+	"github.com/Tharkis/bragi/internal/logging"
 	"github.com/Tharkis/bragi/internal/movies"
 	"github.com/Tharkis/bragi/internal/music"
 	"github.com/Tharkis/bragi/internal/store"
@@ -43,12 +45,16 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
-	slog.SetDefault(log)
-
 	if err := os.MkdirAll(cfg.ConfigDir, 0o755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
+	logs, err := logging.New(os.Stdout, filepath.Join(cfg.ConfigDir, "logs"), cfg.LogLevel)
+	if err != nil {
+		return err
+	}
+	defer logs.Close()
+	log := logs.Logger()
+	slog.SetDefault(log)
 	dbPath := filepath.Join(cfg.ConfigDir, "bragi.db")
 	d, err := db.Open(dbPath)
 	if err != nil {
@@ -76,18 +82,26 @@ func run() error {
 	go backupLoop(ctx, log, d, filepath.Join(cfg.ConfigDir, "backups"))
 
 	st := store.New(d)
+	// A level saved under Settings wins over BRAGI_LOG_LEVEL.
+	if v, _ := st.GetSetting(ctx, api.SettingLogLevel); v != "" {
+		if l, err := logging.ParseLevel(v); err == nil {
+			logs.SetLevel(l)
+		}
+	}
+	log.Info("logging", "level", logging.LevelName(logs.Level()), "file", filepath.Join(logs.Dir, logging.FileName))
+	logSetup(ctx, log, st)
 	hub := events.NewHub()
 	hc := &http.Client{Timeout: 60 * time.Second}
-	pipeline := tv.New(st, hc, log, hub)
+	pipeline := tv.New(st, hc, log.With("component", "tv"), hub)
 	pipeline.TMDBKey = cfg.TMDBKey
 	go pipeline.Run(ctx)
-	moviePipeline := movies.New(st, hc, log, hub, pipeline.TMDB)
+	moviePipeline := movies.New(st, hc, log.With("component", "movies"), hub, pipeline.TMDB)
 	moviePipeline.RefreshJellyfin = pipeline.RefreshJellyfin
 	go moviePipeline.Run(ctx)
-	bookPipeline := books.New(st, hc, log, hub)
+	bookPipeline := books.New(st, hc, log.With("component", "books"), hub)
 	bookPipeline.OnImported = pipeline.RefreshJellyfin
 	go bookPipeline.Run(ctx)
-	musicPipeline := music.New(st, hc, log, hub)
+	musicPipeline := music.New(st, hc, log.With("component", "music"), hub)
 	musicPipeline.OnImported = func(ctx context.Context) error {
 		if err := musicPipeline.RefreshNavidrome(ctx); err != nil {
 			log.Warn("Navidrome scan request failed", "err", err)
@@ -95,14 +109,14 @@ func run() error {
 		return pipeline.RefreshJellyfin(ctx)
 	}
 	go musicPipeline.Run(ctx)
-	scans := api.NewScanManager(st, log, hub, pipeline, moviePipeline, bookPipeline, musicPipeline)
+	scans := api.NewScanManager(st, log.With("component", "scan"), hub, pipeline, moviePipeline, bookPipeline, musicPipeline)
 	scans.Nightly = true
 	scans.Pace = 300 * time.Millisecond // be gentle with TMDB and Open Library
 	go scans.Run(ctx)
 
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
-		Handler: api.New(api.Options{Store: st, Logger: log, Version: version, UI: ui,
+		Handler: api.New(api.Options{Store: st, Logger: log.With("component", "api"), Logs: logs, Version: version, UI: ui,
 			HTTPClient: &http.Client{Timeout: 15 * time.Second}, TV: pipeline, Movies: moviePipeline, Books: bookPipeline, Music: musicPipeline, Events: hub, Scans: scans}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -151,4 +165,42 @@ func backupLoop(ctx context.Context, log *slog.Logger, d *sql.DB, dir string) {
 			timer.Reset(24 * time.Hour)
 		}
 	}
+}
+
+// logSetup writes what is configured, so a log shows at a glance whether an
+// indexer, a download client and a library are there.
+func logSetup(ctx context.Context, log *slog.Logger, st *store.Store) {
+	describe := func(kind store.IntegrationTable) []string {
+		list, err := st.ListIntegrations(ctx, kind)
+		if err != nil {
+			return []string{"error: " + err.Error()}
+		}
+		out := []string{}
+		for _, i := range list {
+			s := i.Name + " (" + i.Kind
+			if !i.Enabled {
+				s += ", disabled"
+			}
+			out = append(out, s+")")
+		}
+		return out
+	}
+	var libs []string
+	if ls, err := st.ListLibraries(ctx); err == nil {
+		for _, l := range ls {
+			libs = append(libs, l.MediaType+": "+l.Path)
+		}
+	}
+	idx, dcs := describe(store.Indexers), describe(store.DownloadClients)
+	if len(idx) == 0 {
+		log.Warn("no indexer is set up, so nothing can be searched for: add one under Settings, Indexers")
+	}
+	if len(dcs) == 0 {
+		log.Warn("no download client is set up, so nothing can be downloaded: add one under Settings, Download clients")
+	}
+	if len(libs) == 0 {
+		log.Warn("no library is set up: add one under Settings, Libraries")
+	}
+	log.Info("setup", "indexers", strings.Join(idx, ", "),
+		"downloadClients", strings.Join(dcs, ", "), "libraries", strings.Join(libs, ", "))
 }
