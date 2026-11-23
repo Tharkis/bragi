@@ -6,6 +6,7 @@
   import LibrarySection from '../components/LibrarySection.svelte'
   import ConnectionsSection from '../components/ConnectionsSection.svelte'
   import MusicSettings from '../components/MusicSettings.svelte'
+  import LogsSection from '../components/LogsSection.svelte'
 
   let { me } = $props()
 
@@ -17,6 +18,7 @@
     { path: '/settings/music', label: 'Music' },
     { path: '/settings/connections', label: 'Connections' },
     { path: '/settings/account', label: 'Account' },
+    { path: '/settings/logs', label: 'Logs' },
   ]
 
   $effect(() => {
@@ -88,6 +90,8 @@
   <MusicSettings />
 {:else if route.path === '/settings/connections'}
   <ConnectionsSection />
+{:else if route.path === '/settings/logs'}
+  <LogsSection />
 {:else if route.path === '/settings/account'}
   <h2>Account</h2>
   <div class="card stack">

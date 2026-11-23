@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/Tharkis/bragi/internal/events"
+	"github.com/Tharkis/bragi/internal/grabs"
 	"github.com/Tharkis/bragi/internal/integrations"
 	"github.com/Tharkis/bragi/internal/library"
 	"github.com/Tharkis/bragi/internal/metadata"
+	"github.com/Tharkis/bragi/internal/release"
 	"github.com/Tharkis/bragi/internal/store"
 )
 
@@ -227,23 +229,26 @@ func (s *Service) searchAndGrab(ctx context.Context, b *store.Book) {
 		if errors.Is(err, ErrNoIndexers) {
 			note, retry = "No indexer or Soulseek client is set up", NoIndexerRetry
 		}
+		s.Log.Warn("search failed", "for", b.MediaType+" "+b.Title, "err", err, "nextSearch", retry)
 		s.Store.SetBookState(ctx, b.ID, keep, note, time.Now().Add(retry))
 		s.publish("book", map[string]any{"id": b.ID})
 		return
 	}
-	for _, c := range cands {
-		if c.Rejected != "" {
-			break
+	what := b.MediaType + " " + b.Title
+	out := grabs.Try(s.Log, what, cands, describe,
+		func(c Candidate) error { return s.Grab(ctx, b, c) },
+		func(c Candidate, reason string) { s.Store.Blocklist(ctx, b.ID, c.Title, reason) },
+		errNoClient)
+	if out.Grabbed {
+		return
+	}
+	if note, retry, ok := out.Note(); ok {
+		if retry == 0 {
+			retry = RetryAfter
 		}
-		err := s.Grab(ctx, b, c)
-		if err == nil {
-			return
-		}
-		s.Log.Warn("grab failed, trying the next release", "release", c.Title, "err", err)
-		if errors.Is(err, errNoClient) {
-			continue
-		}
-		s.Store.Blocklist(ctx, b.ID, c.Title, err.Error())
+		s.Store.SetBookState(ctx, b.ID, keep, note, time.Now().Add(retry))
+		s.publish("book", map[string]any{"id": b.ID})
+		return
 	}
 	note := "No releases found"
 	switch {
@@ -252,14 +257,26 @@ func (s *Service) searchAndGrab(ctx context.Context, b *store.Book) {
 	case len(cands) > 0:
 		note = fmt.Sprintf("Nothing suitable in %d results (%s)", len(cands), topReasons(cands))
 	}
+	s.Log.Info("nothing grabbed", "for", what, "reason", note, "nextSearch", time.Now().Add(RetryAfter).Format(time.RFC3339))
 	s.Store.SetBookState(ctx, b.ID, keep, note, time.Now().Add(RetryAfter))
 	s.publish("book", map[string]any{"id": b.ID})
+}
+
+func describe(c Candidate) grabs.Release {
+	return grabs.Release{Title: c.Title, Protocol: c.Protocol, Rejected: c.Rejected}
+}
+
+func detail(c Candidate) []any {
+	return []any{"format", c.Format, "authorMatch", c.AuthorMatch, "size", release.HumanSize(c.SizeBytes), "seeders", c.Seeders, "indexer", c.Indexer}
 }
 
 func topReasons(cands []Candidate) string {
 	counts := map[string]int{}
 	var order []string
 	for _, c := range cands {
+		if c.Rejected == "" {
+			continue
+		}
 		r := strings.ToLower(c.Rejected)
 		if i := strings.Index(r, " ("); i > 0 {
 			r = r[:i]
@@ -311,6 +328,8 @@ func (s *Service) Search(ctx context.Context, b *store.Book) ([]Candidate, int, 
 		}
 		if a, err := integrations.NewIndexer(ix.Kind, configOf(ix), s.HC); err == nil {
 			sources = append(sources, source{ix.Name, a})
+		} else {
+			s.Log.Warn("indexer skipped", "indexer", ix.Name, "err", err)
 		}
 	}
 	for _, dc := range clients {
@@ -325,6 +344,7 @@ func (s *Service) Search(ctx context.Context, b *store.Book) ([]Candidate, int, 
 		return nil, 0, ErrNoIndexers
 	}
 	q := integrations.Query{MediaType: b.MediaType, Text: SearchText(b)}
+	s.Log.Info("searching", "for", b.MediaType+" "+b.Title, "query", q.Text, "sources", len(sources))
 	var (
 		mu       sync.Mutex
 		wg       sync.WaitGroup
@@ -345,6 +365,7 @@ func (s *Service) Search(ctx context.Context, b *store.Book) ([]Candidate, int, 
 				return
 			}
 			searched++
+			s.Log.Debug("source answered", "source", src.name, "query", q.Text, "results", len(rs))
 			for i := range rs {
 				if rs[i].Indexer == "" {
 					rs[i].Indexer = src.name
@@ -359,7 +380,7 @@ func (s *Service) Search(ctx context.Context, b *store.Book) ([]Candidate, int, 
 		return nil, searched, err
 	}
 	cands := Evaluate(all, Want{MediaType: b.MediaType, Title: b.Title, Author: b.Author, Blocklist: blocked})
-	s.Log.Info("searched", "query", q.Text, "type", b.MediaType, "sources", searched, "results", len(all))
+	grabs.LogResults(s.Log, b.MediaType+" "+b.Title, searched, cands, describe, detail)
 	return cands, searched, nil
 }
 

@@ -58,7 +58,7 @@ func resolveTorrent(ctx context.Context, hc *http.Client, r Release) (*torrentSo
 			return nil, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("%s answered HTTP %d", req.URL.Host, resp.StatusCode)
+			return nil, &StatusError{Host: req.URL.Host, Code: resp.StatusCode}
 		}
 		h, err := infoHash(body)
 		if err != nil {

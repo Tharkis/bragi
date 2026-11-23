@@ -157,7 +157,7 @@ func (n *nzbget) Add(ctx context.Context, r Release) (string, error) {
 	// Bragi fetches the NZB itself, so NZBGet never needs to reach the indexer.
 	nzb, err := fetch(ctx, n.hc, r.DownloadURL)
 	if err != nil {
-		return "", fmt.Errorf("could not fetch the NZB: %w", err)
+		return "", releaseErr(fmt.Errorf("could not fetch the NZB: %w", err))
 	}
 	name := r.Title + ".nzb"
 	// DupeMode FORCE: Bragi has already decided to grab this release, so
@@ -172,7 +172,7 @@ func (n *nzbget) Add(ctx context.Context, r Release) (string, error) {
 		return "", err
 	}
 	if id <= 0 {
-		return "", fmt.Errorf("NZBGet refused the NZB")
+		return "", releaseErr(fmt.Errorf("NZBGet refused the NZB"))
 	}
 	return strconv.FormatInt(id, 10), nil
 }

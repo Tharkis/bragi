@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/Tharkis/bragi/internal/events"
+	"github.com/Tharkis/bragi/internal/grabs"
 	"github.com/Tharkis/bragi/internal/integrations"
 	"github.com/Tharkis/bragi/internal/library"
 	"github.com/Tharkis/bragi/internal/metadata"
+	"github.com/Tharkis/bragi/internal/release"
 	"github.com/Tharkis/bragi/internal/store"
 )
 
@@ -454,23 +456,27 @@ func (s *Service) searchAndGrab(ctx context.Context, al *store.Album) {
 		if errors.Is(err, ErrNoIndexers) {
 			note, retry = "No indexer or Soulseek client is set up", NoIndexerRetry
 		}
+		s.Log.Warn("search failed", "for", al.Artist+" - "+al.Title, "err", err, "nextSearch", retry)
 		s.Store.SetAlbumState(ctx, al.ID, keep, note, time.Now().Add(retry))
 		s.publish("album", map[string]any{"id": al.ID, "artistId": al.ArtistID})
 		return
 	}
-	for _, c := range cands {
-		if c.Rejected != "" {
-			break
+	what := al.Artist + " - " + al.Title
+	grabs.LogResults(s.Log, what, searched, cands, describe, detail)
+	out := grabs.Try(s.Log, what, cands, describe,
+		func(c Candidate) error { return s.Grab(ctx, al, c) },
+		func(c Candidate, reason string) { s.Store.Blocklist(ctx, al.ID, c.Title, reason) },
+		errNoClient)
+	if out.Grabbed {
+		return
+	}
+	if note, r, ok := out.Note(); ok {
+		if r == 0 {
+			r = retry
 		}
-		err := s.Grab(ctx, al, c)
-		if err == nil {
-			return
-		}
-		s.Log.Warn("grab failed, trying the next release", "release", c.Title, "err", err)
-		if errors.Is(err, errNoClient) {
-			continue
-		}
-		s.Store.Blocklist(ctx, al.ID, c.Title, err.Error())
+		s.Store.SetAlbumState(ctx, al.ID, keep, note, time.Now().Add(r))
+		s.publish("album", map[string]any{"id": al.ID, "artistId": al.ArtistID})
+		return
 	}
 	note := "No releases found"
 	switch {
@@ -481,14 +487,26 @@ func (s *Service) searchAndGrab(ctx context.Context, al *store.Album) {
 	case len(cands) > 0:
 		note = fmt.Sprintf("Nothing suitable in %d results (%s)", len(cands), topReasons(cands))
 	}
+	s.Log.Info("nothing grabbed", "for", what, "reason", note, "nextSearch", time.Now().Add(retry).Format(time.RFC3339))
 	s.Store.SetAlbumState(ctx, al.ID, keep, note, time.Now().Add(retry))
 	s.publish("album", map[string]any{"id": al.ID, "artistId": al.ArtistID})
+}
+
+func describe(c Candidate) grabs.Release {
+	return grabs.Release{Title: c.Title, Protocol: c.Protocol, Rejected: c.Rejected}
+}
+
+func detail(c Candidate) []any {
+	return []any{"quality", c.Quality, "size", release.HumanSize(c.SizeBytes), "seeders", c.Seeders, "source", c.Indexer}
 }
 
 func topReasons(cands []Candidate) string {
 	counts := map[string]int{}
 	var order []string
 	for _, c := range cands {
+		if c.Rejected == "" {
+			continue
+		}
 		r := strings.ToLower(c.Rejected)
 		if i := strings.Index(r, " ("); i > 0 {
 			r = r[:i]
@@ -562,6 +580,8 @@ func (s *Service) Search(ctx context.Context, al *store.Album, which string) ([]
 		}
 		if a, err := integrations.NewIndexer(ix.Kind, configOf(ix), s.HC); err == nil {
 			indexers = append(indexers, source{ix.Name, a, false})
+		} else {
+			s.Log.Warn("indexer skipped", "indexer", ix.Name, "err", err)
 		}
 	}
 	if len(slsk)+len(indexers) == 0 {
@@ -615,6 +635,7 @@ func (s *Service) ask(ctx context.Context, al *store.Album, sources []source) ([
 				return
 			}
 			searched++
+			s.Log.Debug("source answered", "source", src.name, "query", q.Text, "results", len(rs))
 			for i := range rs {
 				if rs[i].Indexer == "" {
 					rs[i].Indexer = src.name
@@ -624,7 +645,7 @@ func (s *Service) ask(ctx context.Context, al *store.Album, sources []source) ([
 		}()
 	}
 	wg.Wait()
-	s.Log.Info("searched", "query", q.Text, "type", "music", "sources", searched, "results", len(all))
+	s.Log.Info("searched", "query", q.Text, "sources", searched, "results", len(all))
 	return all, searched
 }
 

@@ -380,7 +380,7 @@ func parseJob(id string) (user, dir string, ok bool) {
 func (s *slskd) Add(ctx context.Context, r Release) (string, error) {
 	pick, err := decodePick(r.DownloadURL)
 	if err != nil {
-		return "", err
+		return "", releaseErr(err)
 	}
 	type want struct {
 		Filename string `json:"filename"`
@@ -391,7 +391,13 @@ func (s *slskd) Add(ctx context.Context, r Release) (string, error) {
 		files[i] = want{f.Filename, f.Size}
 	}
 	if _, err := s.call(ctx, http.MethodPost, "/api/v0/transfers/downloads/"+url.PathEscape(pick.User), files, nil); err != nil {
-		return "", fmt.Errorf("slskd could not queue the files: %w", err)
+		err = fmt.Errorf("slskd could not queue the files: %w", err)
+		// slskd answered, so the peer is the problem: try another one.
+		var ue *UnreachableError
+		if !errors.As(err, &ue) && !errors.Is(err, ErrUnauthorized) {
+			err = releaseErr(err)
+		}
+		return "", err
 	}
 	return jobName(pick.User, remoteDir(pick.Files[0].Filename)), nil
 }
